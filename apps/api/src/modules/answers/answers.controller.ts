@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
 import { AnswersService } from './answers.service';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -49,6 +49,7 @@ export class AnswersController {
   }
 
   @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   remove(@Param("id", ParseUUIDPipe) id: string, @Req() req: any) {

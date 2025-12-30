@@ -7,13 +7,17 @@ import { CreateQuestionDto } from './dtos/create-question.dto';
 import { Cache } from 'cache-manager';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { updateQuestionDto } from './dtos/update-question.dto';
+import { removeUndefinedAndNull } from 'src/common/utils/object.util';
+import { UsersService } from '../users/users.service';
+import { VoteAnswerDto } from '../answers/dtos/answer.dto';
 
 @Injectable()
 export class QuestionsService {
   constructor(
     @InjectRepository(Question) private questionsRepository: Repository<Question>,
     private eventEmitter: EventEmitter2,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache
+    @Inject(CACHE_MANAGER) private cacheManager: Cache,
+    private usersService: UsersService
   ) { }
 
   async create(data: CreateQuestionDto, user: any) {
@@ -100,6 +104,27 @@ export class QuestionsService {
     return question
   }
 
+  async vote(id: string, data: VoteAnswerDto, userId: string) {
+    const question = await this.questionsRepository.findOne({ where: { id }, relations: ["author"] })
+
+    if (!question) throw new NotFoundException("Question not found")
+
+    if (question.author.id === userId) {
+      throw new ForbiddenException("You cannot vote on your own question")
+    }
+
+    question.votes += data.value
+    await this.questionsRepository.save(question)
+
+    if (data.value === 1) {
+      await this.usersService.incrementReputation(question.author.id, 10)
+    } else if (data.value === -1) {
+      await this.usersService.incrementReputation(question.author.id, -2)
+    }
+
+    return question
+  }
+
   async update(id: string, data: updateQuestionDto, userId: string) {
     const question = await this.questionsRepository.findOne({ where: { id }, relations: ["author"] })
 
@@ -109,7 +134,9 @@ export class QuestionsService {
       throw new ForbiddenException("You can only edit your own questions")
     }
 
-    Object.assign(question, data)
+    const updateData = removeUndefinedAndNull(data)
+
+    Object.assign(question, updateData)
     const saved = await this.questionsRepository.save(question)
 
     await this.clearQuestionCache()

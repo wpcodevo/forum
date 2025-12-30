@@ -1,10 +1,12 @@
-import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
-import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateQuestionDto } from './dtos/create-question.dto';
 import { updateQuestionDto } from './dtos/update-question.dto';
+import { QueryQuestionDto } from './dtos/query-question.dto';
 import { QuestionsService } from './questions.service';
+import { VoteAnswerDto } from '../answers/dtos/answer.dto';
 
 @Controller('questions')
 @UseGuards(ThrottlerGuard)
@@ -19,20 +21,20 @@ export class QuestionsController {
   }
 
   @Get()
-  @ApiQuery({ name: 'page', required: false, type: String, description: 'Page number' })
-  @ApiQuery({ name: 'limit', required: false, type: String, description: 'Items per page' })
-  @ApiQuery({ name: 'search', required: false, type: String, description: 'Search query' })
-  findAll(
-    @Query("page") page?: string,
-    @Query("limit") limit?: string,
-    @Query("search") search?: string
-  ) {
-    return this.questionsService.findAll(Number(page || "1"), Number(limit || "10"), search)
+  findAll(@Query() query: QueryQuestionDto) {
+    return this.questionsService.findAll(query.page || 1, query.limit || 10, query.search)
   }
 
   @Get(":id")
   findOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.questionsService.findOne(id)
+  }
+
+  @Patch(":id/vote")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  vote(@Param("id", ParseUUIDPipe) id: string, @Body() body: VoteAnswerDto, @Req() req: any) {
+    return this.questionsService.vote(id, body, req.user.sub as string)
   }
 
   @Patch(":id")
@@ -43,6 +45,7 @@ export class QuestionsController {
   }
 
   @Delete(":id")
+  @HttpCode(HttpStatus.NO_CONTENT)
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   remove(@Param("id", ParseUUIDPipe) id: string, @Req() req: any) {

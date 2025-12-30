@@ -69,10 +69,6 @@ export class AnswersService {
     }
 
     answer.votes += data.value
-    // Ensure votes don't go below 0
-    if (answer.votes < 0) {
-      answer.votes = 0
-    }
     await this.answersRepository.save(answer)
 
     if (data.value === 1) {

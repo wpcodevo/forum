@@ -4,6 +4,7 @@ import { User } from 'src/database/entities/user.entity';
 import { Repository } from 'typeorm';
 import { RegisterUserDto } from '../auth/dtos/register.dto';
 import { UpdateUserDto } from './dtos/users.dto';
+import { removeUndefinedAndNull } from 'src/common/utils/object.util';
 
 @Injectable()
 export class UsersService {
@@ -61,7 +62,9 @@ export class UsersService {
       }
     }
 
-    Object.assign(user, data)
+    const updateData = removeUndefinedAndNull(data)
+
+    Object.assign(user, updateData)
 
     return this.usersRepository.save(user)
   }
