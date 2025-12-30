@@ -1,7 +1,9 @@
 import { Body, Controller, Delete, ForbiddenException, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Req, UseGuards } from '@nestjs/common';
+import { ApiBearerAuth } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { UpdateUserDto } from './dtos/users.dto';
 import { UsersService } from './users.service';
+
 
 @Controller('users')
 export class UsersController {
@@ -23,6 +25,7 @@ export class UsersController {
   }
 
   @Patch(":id")
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   update(@Param("id", ParseUUIDPipe) id: string, @Body() body: UpdateUserDto, @Req() req: any) {
     if (req.user.sub !== id) {
@@ -34,6 +37,7 @@ export class UsersController {
 
   @Delete(":id")
   @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
   remove(@Param("id", ParseUUIDPipe) id: string, @Req() req: any) {
     if (req.user.sub !== id) {

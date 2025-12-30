@@ -31,19 +31,19 @@ export class UsersService {
   }
 
   async findAll(): Promise<User[]> {
-    return this.usersRepository.find({ select: ['id', 'email', 'username', 'bio', 'avatar', 'createdAt', 'updatedAt'] })
+    return this.usersRepository.find({ select: ['id', 'email', 'username', 'bio', 'reputation', 'avatar', 'createdAt'] })
   }
 
   async findOne(id: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { id } })
+    return this.usersRepository.findOne({ where: { id }, relations: ["questions", "answers"], select: ["id", "email", "username", "bio", 'reputation', "avatar", "createdAt"] })
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { email }, select: ['id', 'email', 'password', 'username', 'bio', 'avatar', 'createdAt', 'updatedAt'] })
+    return this.usersRepository.findOne({ where: { email }, select: ['id', 'email', 'password', 'username', 'bio', 'reputation', 'avatar', 'createdAt'] })
   }
 
   async findByUsername(username: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { username }, select: ['id', 'email', 'username', 'bio', 'avatar', 'createdAt', 'updatedAt'] })
+    return this.usersRepository.findOne({ where: { username }, relations: ["questions", "answers"], select: ['id', 'email', 'username', 'reputation', 'bio', 'avatar', 'createdAt'] })
   }
 
   async update(id: string, data: UpdateUserDto) {
@@ -74,5 +74,9 @@ export class UsersService {
     }
 
     await this.usersRepository.remove(user)
+  }
+
+  async incrementReputation(userId: string, amount: number) {
+    await this.usersRepository.increment({ id: userId }, "reputation", amount)
   }
 }

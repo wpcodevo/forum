@@ -6,26 +6,20 @@ import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
 import { AppModule } from './app.module';
 import { GlobalExceptionFilter } from './common/filters/exception.filter';
+import { EnvConfig } from './config/env.config';
+import helmet from 'helmet';
+import compression from 'compression';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
-  const configServer = app.get(ConfigService)
+  const configService = app.get<ConfigService<EnvConfig>>(ConfigService)
 
-  const apiPrefix = configServer.get<string>("API_PREFIX", "api")
+  const apiPrefix = configService.get<string>("API_PREFIX")
   app.setGlobalPrefix(apiPrefix)
 
-  const config = new DocumentBuilder()
-    .setTitle('Q&A Forum API')
-    .setDescription('Mini Q&A Forum API')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .addCookieAuth()
-    .build();
-
-  const documentFactory = () => SwaggerModule.createDocument(app, config);
-  SwaggerModule.setup('api/docs', app, documentFactory);
-
-  app.enableCors({ credentials: true });
+  app.use(helmet)
+  app.use(compression())
+  app.enableCors({ origin: configService.get("FRONTEND_URL"), credentials: true });
   app.use(cookieParser());
   app.useGlobalFilters(new GlobalExceptionFilter())
   app.useGlobalPipes(new ValidationPipe({
@@ -36,7 +30,18 @@ async function bootstrap() {
       enableImplicitConversion: true
     }
   }))
-  await app.listen(configServer.get("PORT") ?? 8000);
+
+  const config = new DocumentBuilder()
+    .setTitle('Q&A Forum API')
+    .setDescription('Mini Q&A Forum API')
+    .setVersion('1.0')
+    .addBearerAuth()
+    .build();
+
+  const documentFactory = () => SwaggerModule.createDocument(app, config);
+  SwaggerModule.setup('api/docs', app, documentFactory);
+
+  await app.listen(configService.get<number>("PORT") ?? 8000);
 }
 
 void bootstrap();

@@ -1,7 +1,9 @@
-import { BeforeInsert, BeforeUpdate, Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import bcrypt from "bcrypt"
 import { Exclude } from "class-transformer";
 import { env } from 'node:process';
+import { Question } from "./question.entity";
+import { Answer } from "./answer.entity";
 
 
 @Entity("users")
@@ -24,6 +26,15 @@ export class User {
 
   @Column({ nullable: true })
   avatar?: string
+
+  @Column({ default: 0 })
+  reputation: number
+
+  @OneToMany(() => Question, (question) => question.author)
+  questions: Question[]
+
+  @OneToMany(() => Answer, (answer) => answer.author)
+  answers: Answer[]
 
   @CreateDateColumn()
   createdAt: Date

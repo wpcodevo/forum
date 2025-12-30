@@ -5,11 +5,12 @@ import { LoginUserDto } from './dtos/login.dto';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { Response } from 'express';
 import { ConfigService } from '@nestjs/config';
+import { EnvConfig } from '../../config/env.config';
 
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
 export class AuthController {
-  constructor(private readonly authService: AuthService, private readonly configService: ConfigService) { }
+  constructor(private readonly authService: AuthService, private readonly configService: ConfigService<EnvConfig>) { }
 
   @Post("register")
   async register(@Body() body: RegisterUserDto) {

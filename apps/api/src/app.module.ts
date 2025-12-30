@@ -1,15 +1,17 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 
-import { AppController } from './app.controller';
-import { AppService } from './app.service';
+import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import * as Joi from "joi"
+import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
-import { UsersModule } from './modules/users/users.module';
+import { EnvConfig, envSchema } from './config/env.config';
+import { AnswersModule } from './modules/answers/answers.module';
 import { AuthModule } from './modules/auth/auth.module';
-import { ThrottlerModule } from '@nestjs/throttler';
-import { CacheModule } from '@nestjs/cache-manager';
+import { QuestionsModule } from './modules/questions/questions.module';
+import { UsersModule } from './modules/users/users.module';
+import { NotificationsModule } from './modules/notifications/notifications.module';
 
 @Module({
   imports: [
@@ -17,19 +19,20 @@ import { CacheModule } from '@nestjs/cache-manager';
       cache: true,
       isGlobal: true,
       expandVariables: true,
-      validationSchema: Joi.object({
-        NODE_ENV: Joi.string().valid("development", "production", "test").default("development"),
-        PORT: Joi.number().port().default(8000),
-        DATABASE_URL: Joi.string().required(),
-        API_PREFIX: Joi.string().default("api"),
-        BCRYPT_ROUNDS: Joi.number().default(12),
-        JWT_SECRET: Joi.string().required()
-      })
+      validate: (config) => {
+        const result = envSchema.safeParse(config);
+        if (!result.success) {
+          throw new Error(
+            `Environment validation failed: ${result.error.issues.map((e) => `${e.path.join('.')}: ${e.message}`).join(', ')}`
+          );
+        }
+        return result.data;
+      },
     }),
     TypeOrmModule.forRootAsync({
       imports: [ConfigModule],
       inject: [ConfigService],
-      useFactory: (config: ConfigService) => ({
+      useFactory: (config: ConfigService<EnvConfig>) => ({
         type: "postgres",
         url: config.get("DATABASE_URL"),
         autoLoadEntities: true,
@@ -42,15 +45,17 @@ import { CacheModule } from '@nestjs/cache-manager';
         limit: 10
       }
     ]),
+    EventEmitterModule.forRoot(),
     CacheModule.register({ isGlobal: true, ttl: 5000 }),
     UsersModule,
-    AuthModule
+    AuthModule,
+    QuestionsModule,
+    AnswersModule,
+    NotificationsModule,
   ],
-  controllers: [AppController],
-  providers: [AppService],
 })
 export class AppModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {
-    consumer.apply(LoggerMiddleware).forRoutes("*")
+    consumer.apply(LoggerMiddleware).forRoutes('*path')
   }
 }
