@@ -24,7 +24,14 @@ export class QuestionsService {
 
     const saved = await this.questionsRepository.save(question)
 
-    this.eventEmitter.emit("question.created", saved)
+    const questionWithAuthor = await this.questionsRepository.findOne({
+      where: { id: saved.id },
+      relations: ["author"]
+    })
+
+    if (questionWithAuthor) {
+      this.eventEmitter.emit("question.created", questionWithAuthor)
+    }
 
     await this.clearQuestionCache()
 
@@ -58,7 +65,7 @@ export class QuestionsService {
         const { author, ...rest } = i
         return {
           ...rest,
-          author: { id: author.id, username: author.username },
+          author: author ? { id: author.id, username: author.username } : null,
           answerCount: i.answers?.length || 0
         }
       }),

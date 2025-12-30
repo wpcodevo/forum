@@ -31,7 +31,13 @@ export class AnswersService {
 
     const fullAnswer = await this.answersRepository.findOne({ where: { id: saved.id }, relations: ["author", "question"] })
 
-    this.eventEmitter.emit("answer.created", { answer: fullAnswer, questionId, questionAuthorId: question.author.id })
+    if (!fullAnswer) {
+      throw new NotFoundException("Failed to retrieve created answer")
+    }
+
+    if (question.author?.id) {
+      this.eventEmitter.emit("answer.created", { answer: fullAnswer, questionId, questionAuthorId: question.author.id })
+    }
 
     return fullAnswer
   }
@@ -54,7 +60,7 @@ export class AnswersService {
   }
 
   async vote(id: string, data: VoteAnswerDto, userId: string) {
-    const answer = await this.answersRepository.findOne({ where: { id }, relations: ["author"] })
+    const answer = await this.answersRepository.findOne({ where: { id }, relations: ["author", "question"] })
 
     if (!answer) throw new NotFoundException("Answer not found")
 
@@ -63,6 +69,10 @@ export class AnswersService {
     }
 
     answer.votes += data.value
+    // Ensure votes don't go below 0
+    if (answer.votes < 0) {
+      answer.votes = 0
+    }
     await this.answersRepository.save(answer)
 
     if (data.value === 1) {
@@ -106,6 +116,10 @@ export class AnswersService {
 
     if (!answer) throw new NotFoundException("Answer not found")
 
+    if (!answer.question?.author) {
+      throw new NotFoundException("Question author not found")
+    }
+
     if (answer.question.author.id !== userId) {
       throw new ForbiddenException("Only the question author can accept an answer")
     }
@@ -119,7 +133,7 @@ export class AnswersService {
     // Reward the answer author with bonus reputation
     await this.usersService.incrementReputation(answer.author.id, 15)
 
-    this.eventEmitter.emit("answer.voted", {
+    this.eventEmitter.emit("answer.accepted", {
       answerId: answer.id, questionId: answer.question.id, authorId: answer.author.id
     })
 

@@ -37,21 +37,21 @@ export class AnswersController {
   @Patch(":id")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  update(@Param("id") id: string, @Body() body: CreateAnswerDto, @Req() req: any) {
+  update(@Param("id", ParseUUIDPipe) id: string, @Body() body: CreateAnswerDto, @Req() req: any) {
     return this.answersService.update(id, body.content, req.user.sub as string)
   }
 
   @Patch(":id/accept")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  markAsAccepted(@Param("id") id: string, @Req() req: any) {
+  markAsAccepted(@Param("id", ParseUUIDPipe) id: string, @Req() req: any) {
     return this.answersService.markAsAccepted(id, req.user.sub as string)
   }
 
   @Delete(":id")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  remove(@Param("id") id: string, @Req() req: any) {
+  remove(@Param("id", ParseUUIDPipe) id: string, @Req() req: any) {
     return this.answersService.remove(id, req.user.sub as string)
   }
 }

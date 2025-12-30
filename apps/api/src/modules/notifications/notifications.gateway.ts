@@ -61,9 +61,9 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     if (userId) {
       this.userSockets.delete(userId)
       this.socketUsers.delete(client.id)
-      this.logger.log(`Client discounted: ${client.id} (User: ${userId})`)
+      this.logger.log(`Client disconnected: ${client.id} (User: ${userId})`)
     } else {
-      this.logger.log(`Client discounted: ${client.id}`)
+      this.logger.log(`Client disconnected: ${client.id}`)
     }
   }
 
@@ -91,7 +91,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     const questionAuthorSocketId = this.userSockets.get(payload.questionAuthorId)
     if (questionAuthorSocketId) {
       this.server.to(questionAuthorSocketId).emit("answerNotification", {
-        message: `${payload.answer.author.id} answered your question`,
+        message: `${payload.answer.author.username} answered your question`,
         answer: {
           id: payload.answer.id,
           content: payload.answer.content.substring(0, 100),
@@ -109,7 +109,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
         votes: payload.answer.votes,
         author: {
           id: payload.answer.author.id,
-          username: payload.answer.author.id,
+          username: payload.answer.author.username,
         },
         createdAt: payload.answer.createdAt
       }
@@ -131,7 +131,7 @@ export class NotificationsGateway implements OnGatewayConnection, OnGatewayDisco
     this.logger.log(`Broadcasting accepted answer: ${payload.answerId}`)
 
     // Notify the answer author
-    const answerAuthorSocketId = this.userSockets.get(payload.answerId)
+    const answerAuthorSocketId = this.userSockets.get(payload.authorId)
     if (answerAuthorSocketId) {
       this.server.to(answerAuthorSocketId).emit("answerAcceptedNotification", {
         message: "Your answer was accepted!",

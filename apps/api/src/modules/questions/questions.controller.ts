@@ -1,10 +1,10 @@
 import { Body, Controller, Delete, Get, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
-import { QuestionsService } from './questions.service';
 import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateQuestionDto } from './dtos/create-question.dto';
 import { updateQuestionDto } from './dtos/update-question.dto';
+import { QuestionsService } from './questions.service';
 
 @Controller('questions')
 @UseGuards(ThrottlerGuard)
@@ -14,7 +14,7 @@ export class QuestionsController {
   @Post()
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  create(@Body() body: CreateQuestionDto, req: any) {
+  create(@Body() body: CreateQuestionDto, @Req() req: any) {
     return this.questionsService.create(body, req.user)
   }
 
@@ -31,21 +31,21 @@ export class QuestionsController {
   }
 
   @Get(":id")
-  fineOne(@Param("id", ParseUUIDPipe) id: string) {
+  findOne(@Param("id", ParseUUIDPipe) id: string) {
     return this.questionsService.findOne(id)
   }
 
   @Patch(":id")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  update(@Param("id", ParseUUIDPipe) id: string, @Body() body: updateQuestionDto, @Req() res: any) {
-    return this.questionsService.update(id, body, res.user.sub as string)
+  update(@Param("id", ParseUUIDPipe) id: string, @Body() body: updateQuestionDto, @Req() req: any) {
+    return this.questionsService.update(id, body, req.user.sub as string)
   }
 
   @Delete(":id")
   @ApiBearerAuth()
   @UseGuards(JwtAuthGuard)
-  remove(@Param("id") id: string, @Req() req: any) {
+  remove(@Param("id", ParseUUIDPipe) id: string, @Req() req: any) {
     return this.questionsService.remove(id, req.user.sub as string)
   }
 }

@@ -45,7 +45,8 @@ export class User {
   @BeforeInsert()
   @BeforeUpdate()
   async hashPassword() {
-    if (this.password && this.password.length < 100) {
+    // Only hash if password exists and is not already hashed
+    if (this.password && !this.password.startsWith('$2')) {
       const saltRounds = parseInt(env.BCRYPT_ROUNDS || '12', 10)
       this.password = await bcrypt.hash(this.password, saltRounds)
     }

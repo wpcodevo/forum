@@ -17,7 +17,7 @@ async function bootstrap() {
   const apiPrefix = configService.get<string>("API_PREFIX")
   app.setGlobalPrefix(apiPrefix)
 
-  app.use(helmet)
+  app.use(helmet())
   app.use(compression())
   app.enableCors({ origin: configService.get("FRONTEND_URL"), credentials: true });
   app.use(cookieParser());
