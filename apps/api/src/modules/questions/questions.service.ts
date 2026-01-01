@@ -2,6 +2,7 @@ import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nest
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Question } from 'src/database/entities/question.entity';
+import { Answer } from 'src/database/entities/answer.entity';
 import { Repository } from 'typeorm';
 import { CreateQuestionDto } from './dtos/create-question.dto';
 import { Cache } from 'cache-manager';
@@ -10,6 +11,7 @@ import { updateQuestionDto } from './dtos/update-question.dto';
 import { removeUndefinedAndNull } from 'src/common/utils/object.util';
 import { UsersService } from '../users/users.service';
 import { VoteAnswerDto } from '../answers/dtos/answer.dto';
+import { QueryQuestionByUserIdDto, SortBy } from './dtos/query-question.dto';
 
 @Injectable()
 export class QuestionsService {
@@ -42,35 +44,81 @@ export class QuestionsService {
     return saved
   }
 
-  async findAll(page = 1, limit = 10, search?: string) {
-    const cacheKey = `questions_list_p${page}_l${limit}_s${search || ""}`
+  async findAll(page = 1, limit = 10, search?: string, sort: SortBy = 'newest') {
+    const cacheKey = `questions_list_p${page}_l${limit}_s${search || ""}_${sort}`
     const cachedData = await this.cacheManager.get(cacheKey)
 
     if (cachedData) {
       return cachedData
     }
 
+    // Create base query
     const queryBuilder = this.questionsRepository
       .createQueryBuilder("question")
       .leftJoinAndSelect("question.author", "author")
-      .leftJoinAndSelect("question.answers", "answers")
-      .orderBy("question.createdAt", "DESC")
-      .skip((page - 1) * limit)
-      .take(limit)
 
     if (search) {
-      queryBuilder.where("question.title ILIKE :search OR question.content ILIKE :search", { search: `%${search}%` })
+      queryBuilder.where("question.title ILIKE :search OR question.content ILIKE :search", {
+        search: `%${search}%`
+      })
     }
 
+    switch (sort) {
+      case 'newest':
+        queryBuilder.orderBy("question.createdAt", "DESC")
+        break
+      case 'popular':
+        queryBuilder.orderBy("question.views", "DESC")
+        break
+      case 'unanswered':
+        queryBuilder
+          .andWhere(
+            "NOT EXISTS (SELECT 1 FROM answers WHERE answers.\"questionId\" = question.id)"
+          )
+          .orderBy("question.createdAt", "DESC")
+        break
+      case 'recentlyAnswered':
+        queryBuilder
+          .addSelect('MAX(answers.createdAt)', 'max_answer_date')
+          .leftJoin("question.answers", "answers")
+          .groupBy('question.id')
+          .addGroupBy('author.id')
+          .orderBy('max_answer_date', 'DESC', 'NULLS LAST')
+          .addOrderBy('question.createdAt', 'DESC')
+        break
+      default:
+        queryBuilder.orderBy("question.createdAt", "DESC")
+    }
+
+    queryBuilder.skip((page - 1) * limit).take(limit)
     const [items, total] = await queryBuilder.getManyAndCount()
+
+    // Get answer counts for all questions
+    const questionIds = items.map(item => item.id)
+    const answerCounts: Record<string, number> = {}
+
+    if (questionIds.length > 0) {
+      const counts = await this.questionsRepository
+        .createQueryBuilder("question")
+        .leftJoin("question.answers", "answers")
+        .select("question.id", "questionId")
+        .addSelect("COUNT(answers.id)", "answerCount")
+        .where("question.id IN (:...questionIds)", { questionIds })
+        .groupBy("question.id")
+        .getRawMany()
+
+      counts.forEach(item => {
+        answerCounts[item.questionId] = parseInt(item.answerCount as string) || 0
+      })
+    }
 
     const result = {
       items: items.map(i => {
         const { author, ...rest } = i
         return {
           ...rest,
-          author: author ? { id: author.id, username: author.username } : null,
-          answerCount: i.answers?.length || 0
+          author: author ? { id: author.id, username: author.username, name: author.name } : null,
+          answerCount: answerCounts[i.id] || 0
         }
       }),
       total,
@@ -156,6 +204,90 @@ export class QuestionsService {
     await this.questionsRepository.remove(question)
 
     await this.clearQuestionCache()
+  }
+
+  async findByUserId({ page, limit, includeAnswers }: QueryQuestionByUserIdDto, userId: string) {
+    const cacheKey = `questions_user_${userId}_p${page}_l${limit}_ia${includeAnswers}`
+
+    const cachedData = await this.cacheManager.get(cacheKey)
+    if (cachedData) {
+      return cachedData
+    }
+
+    const queryBuilder = this.questionsRepository.createQueryBuilder("question").leftJoinAndSelect("question.author", "author").where("author.id = :userId", { userId })
+
+    if (includeAnswers) {
+      queryBuilder.leftJoinAndSelect("question.answers", "answers").leftJoinAndSelect("answers.author", "answerAuthor")
+    }
+
+    queryBuilder.orderBy("question.createdAt", "DESC")
+    queryBuilder.skip((page - 1) * limit).take(limit)
+
+    const [items, total] = await queryBuilder.getManyAndCount()
+
+    const questionIds = items.map(item => item.id)
+    const answerCounts: Record<string, number> = {}
+
+    if (questionIds.length > 0 && !includeAnswers) {
+      const counts = await this.questionsRepository
+        .createQueryBuilder("question")
+        .leftJoin("question.answers", "answers")
+        .select("question.id", "questionId")
+        .addSelect("COUNT(answers.id)", "answerCount")
+        .where("question.id IN (:...questionIds)", { questionIds })
+        .groupBy("question.id")
+        .getRawMany()
+
+      counts.forEach(item => {
+        answerCounts[item.questionId] = parseInt(item.answerCount as string) || 0
+      })
+    }
+
+    const result = {
+      items: items.map(i => {
+        const { author, answers, ...rest } = i;
+
+        const formattedAuthor = author ? {
+          id: author.id,
+          username: author.username,
+          name: author.name
+        } : null
+
+
+        let formattedAnswers: Array<Omit<Answer, 'author' | 'question'> & {
+          author: { id: string; username: string; name: string } | null;
+        }> | undefined;
+        if (includeAnswers && answers) {
+          formattedAnswers = answers.map(answer => {
+            const { author: answerAuthor, ...answerRest } = answer
+
+            return {
+              ...answerRest,
+              author: answerAuthor ? {
+                id: answerAuthor.id,
+                username: answerAuthor.username,
+                name: answerAuthor.name
+              } : null
+            }
+          })
+        }
+
+        return {
+          ...rest,
+          author: formattedAuthor,
+          answers: includeAnswers ? formattedAnswers : undefined,
+          answerCount: includeAnswers ? answers.length || 0 : answerCounts[i.id] || 0
+        }
+      }),
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit)
+    }
+
+    await this.cacheManager.set(cacheKey, result, 60000)
+
+    return result
   }
 
   private async incrementViews(id: string) {

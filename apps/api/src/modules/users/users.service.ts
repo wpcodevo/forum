@@ -14,7 +14,7 @@ export class UsersService {
   ) { }
 
   async create(data: RegisterUserDto): Promise<User> {
-    const { email, username, password } = data
+    const { name, email, username, password } = data
     const existingUser = await this.usersRepository.findOne({ where: [{ email }, { username }] })
 
     if (existingUser) {
@@ -25,26 +25,26 @@ export class UsersService {
     }
 
     const user = this.usersRepository.create({
-      email, username, password
+      name, email, username, password
     })
 
     return this.usersRepository.save(user)
   }
 
   async findAll(): Promise<User[]> {
-    return this.usersRepository.find({ select: ['id', 'email', 'username', 'bio', 'reputation', 'avatar', 'createdAt'] })
+    return this.usersRepository.find({ select: ['id', 'name', 'email', 'username', 'bio', 'reputation', 'avatar', 'createdAt'] })
   }
 
   async findOne(id: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { id }, relations: ["questions", "answers"], select: ["id", "email", "username", "bio", 'reputation', "avatar", "createdAt"] })
+    return this.usersRepository.findOne({ where: { id }, relations: ["questions", "answers"], select: ["id", 'name', "email", "username", "bio", 'reputation', "avatar", "createdAt"] })
   }
 
   async findByEmail(email: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { email }, select: ['id', 'email', 'password', 'username', 'bio', 'reputation', 'avatar', 'createdAt'] })
+    return this.usersRepository.findOne({ where: { email }, select: ['id', 'name', 'email', 'password', 'username', 'bio', 'reputation', 'avatar', 'createdAt'] })
   }
 
   async findByUsername(username: string): Promise<User | null> {
-    return this.usersRepository.findOne({ where: { username }, relations: ["questions", "answers"], select: ['id', 'email', 'username', 'reputation', 'bio', 'avatar', 'createdAt'] })
+    return this.usersRepository.findOne({ where: { username }, relations: ["questions", "answers"], select: ['id', 'name', 'email', 'username', 'reputation', 'bio', 'avatar', 'createdAt'] })
   }
 
   async update(id: string, data: UpdateUserDto) {

@@ -18,5 +18,11 @@ export default defineNuxtConfig({
       title: "DevFlow - Developer Q&A Community",
       meta: [{ name: "description", content: "Ask technical questions and get answers from the developer community" }]
     }
+  },
+  runtimeConfig: {
+    public: {
+      apiBaseUrl: process.env.NUXT_PUBLIC_API_BASE_URL || "http://localhost:8000",
+      wsUrl: process.env.NUXT_PUBLIC_WS_URL || "http://localhost:8000",
+    }
   }
 })

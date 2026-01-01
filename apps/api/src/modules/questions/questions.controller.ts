@@ -4,7 +4,7 @@ import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateQuestionDto } from './dtos/create-question.dto';
 import { updateQuestionDto } from './dtos/update-question.dto';
-import { QueryQuestionDto } from './dtos/query-question.dto';
+import { QueryQuestionByUserIdDto, QueryQuestionDto } from './dtos/query-question.dto';
 import { QuestionsService } from './questions.service';
 import { VoteAnswerDto } from '../answers/dtos/answer.dto';
 
@@ -22,7 +22,14 @@ export class QuestionsController {
 
   @Get()
   findAll(@Query() query: QueryQuestionDto) {
-    return this.questionsService.findAll(query.page || 1, query.limit || 10, query.search)
+    return this.questionsService.findAll(query.page || 1, query.limit || 10, query.search, query.sort)
+  }
+
+  @Get("user")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  findByUserId(@Query() query: QueryQuestionByUserIdDto, @Req() req: any) {
+    return this.questionsService.findByUserId(query, req.user.sub as string)
   }
 
   @Get(":id")

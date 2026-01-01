@@ -14,14 +14,21 @@ export class UsersController {
     return this.usersService.findAll()
   }
 
-  @Get(":id")
-  findOne(@Param("id", ParseUUIDPipe) id: string) {
-    return this.usersService.findOne(id)
+  @Get("me")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  getMe(@Req() req: any) {
+    return this.usersService.findOne(req.user.sub as string)
   }
 
   @Get("username/:username")
   findByUsername(@Param("username") username: string) {
     return this.usersService.findByUsername(username)
+  }
+
+  @Get(":id")
+  findOne(@Param("id", ParseUUIDPipe) id: string) {
+    return this.usersService.findOne(id)
   }
 
   @Patch(":id")

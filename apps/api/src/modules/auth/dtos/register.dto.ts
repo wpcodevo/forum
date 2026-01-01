@@ -1,6 +1,9 @@
 import { IsEmail, IsString, Matches, MaxLength, MinLength } from "class-validator";
 
 export class RegisterUserDto {
+  @IsString()
+  name: string
+
   @IsEmail({}, { message: "Please provide a valid email address" })
   email: string
 

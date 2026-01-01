@@ -22,10 +22,20 @@ export class AuthController {
     const validatedUser = await this.authService.validateUser(body)
     const { access_token, user } = await this.authService.login(validatedUser)
 
-    res.cookie('token', access_token, { httpOnly: true, secure: this.configService.get("NODE_ENV") === 'production', maxAge: 24 * 60 * 60 * 1000 })
+    res.cookie('token', access_token, {
+      httpOnly: true,
+      secure: this.configService.get("NODE_ENV") === 'production',
+      sameSite: this.configService.get("NODE_ENV") === 'production' ? 'none' : 'lax',
+      maxAge: 24 * 60 * 60 * 1000
+    })
     return {
       access_token,
       user
     }
+  }
+
+  @Post("logout")
+  async logout(@Res({ passthrough: true }) res: Response) {
+    res.clearCookie("token")
   }
 }

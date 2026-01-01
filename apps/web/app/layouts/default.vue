@@ -1,6 +1,10 @@
 <script setup lang="ts">
 import { Button } from '~/components/ui/button';
 import { Input } from '~/components/ui/input';
+import { Toaster } from '~/components/ui/sonner';
+import 'vue-sonner/style.css'
+
+const auth = useAuthStore()
 
 </script>
 
@@ -9,7 +13,7 @@ import { Input } from '~/components/ui/input';
     <header class="sticky top-0 z-50 w-full border-b bg-background/95 supports-[backdrop-filter]:">
       <div class="container mx-auto flex h-14 items-center justify-between">
         <div class="flex items-center gap-6">
-          <NuxtLink to="/">
+          <NuxtLink to="/" class="flex items-center space-x-2">
             <LucideLayoutGrid class="h-6 w-6 text-primary" />
             <span class="font-bold sm:inline-block">DevFlow</span>
           </NuxtLink>
@@ -28,22 +32,24 @@ import { Input } from '~/components/ui/input';
             </div>
           </div>
           <nav class="flex items-center gap-2">
-            <Button variant="ghost" size="icon" as-child>
-              <NuxtLink to="/profile">
-                <LucideUser class="h-5 w-5" />
-              </NuxtLink>
-              <Button variant="outline" size="sm">
+            <div v-if="auth.isAuthenticated" class="flex items-center gap-2">
+              <Button variant="ghost" size="icon" as-child>
+                <NuxtLink to="/profile">
+                  <LucideUser class="h-5 w-5" />
+                </NuxtLink>
+              </Button>
+              <Button variant="outline" size="sm" @click="auth.logout">
                 Log out
               </Button>
-              <div class="flex items-center gap-2">
-                <Button variant="ghost" size="sm" as-child>
-                  <NuxtLink to="/login">Log in</NuxtLink>
-                </Button>
-                <Button size="sm" as-child>
-                  <NuxtLink to="/register">Sign up</NuxtLink>
-                </Button>
-              </div>
-            </Button>
+            </div>
+            <div class="flex items-center gap-2" v-else>
+              <Button variant="ghost" size="sm" as-child>
+                <NuxtLink to="/login">Log in</NuxtLink>
+              </Button>
+              <Button size="sm" as-child>
+                <NuxtLink to="/register">Sign up</NuxtLink>
+              </Button>
+            </div>
           </nav>
         </div>
       </div>
@@ -51,6 +57,7 @@ import { Input } from '~/components/ui/input';
 
     <main class="flex-1 container mx-auto py-8">
       <slot />
+      <Toaster />
     </main>
 
     <footer class="border-t py-6 md:py-0">
