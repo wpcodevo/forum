@@ -5,27 +5,22 @@ import { Toaster } from '~/components/ui/sonner';
 import 'vue-sonner/style.css'
 
 const auth = useAuthStore()
+const route = useRoute()
 
+const showSearch = computed(() => route.path === '/')
 </script>
 
 <template>
-  <div class="min-h-screen bg-background flex flex-col">
+  <div class="min-h-screen bg-background flex flex-col px-4">
     <header class="sticky top-0 z-50 w-full border-b bg-background/95 supports-[backdrop-filter]:">
       <div class="container mx-auto flex h-14 items-center justify-between">
-        <div class="flex items-center gap-6">
-          <NuxtLink to="/" class="flex items-center space-x-2">
-            <LucideLayoutGrid class="h-6 w-6 text-primary" />
-            <span class="font-bold sm:inline-block">DevFlow</span>
-          </NuxtLink>
-          <nav class="flex items-center space-x-6 text-sm font-medium">
-            <NuxtLink to="/questions" class="transition-colors hover:text-foreground/80 text-foreground/60">Questions
-            </NuxtLink>
-            <NuxtLink to="/tags" class="transition-colors hover:text-foreground/80 text-foreground/60">Tags</NuxtLink>
-          </nav>
-        </div>
+        <NuxtLink to="/" class="flex items-center space-x-2">
+          <LucideLayoutGrid class="h-6 w-6 text-primary" />
+          <span class="font-bold sm:inline-block">DevFlow</span>
+        </NuxtLink>
 
         <div class="flex flex-1 items-center justify-end space-x-4">
-          <div class="w-full flex-1 md:w-auto md:flex-none">
+          <div v-if="showSearch" class="w-full flex-1 md:w-auto md:flex-none">
             <div class="relative">
               <LucideSearch class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
               <Input type="search" placeholder="Search questions..." class="pl-8 md:w-[300px] lg:w-[400px]" />

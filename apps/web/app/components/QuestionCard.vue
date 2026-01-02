@@ -1,37 +1,41 @@
 <script setup lang="ts">
+import { LucideChevronDown, LucideChevronUp, LucideEye, LucideMessageSquare } from 'lucide-vue-next';
 import type { Question } from '~/types/question';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from './ui/avatar';
 import { Badge } from './ui/badge';
-import { LucideChevronUp, LucideChevronDown, LucideMessageSquare, LucideEye } from 'lucide-vue-next';
+import { Button } from './ui/button';
+import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { formatTimeAgo } from '~/lib/utils';
 
 const props = defineProps<{ question: Question }>()
+const emit = defineEmits<{
+  voted: []
+}>()
 
-const formattedDate = computed(() => {
-  if (!props.question.createdAt) return ''
+const questionStore = useQuestionStore()
+const { showError } = useToast()
+const auth = useAuthStore()
 
-  const date = new Date(props.question.createdAt);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMins = Math.floor(diffMs / (1000 * 60));
-  const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
-  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24));
+const userVote = computed(() => props.question.userVote ?? null)
+const isUpvoted = computed(() => userVote.value === 1)
+const isDownvoted = computed(() => userVote.value === -1)
 
-  if (diffMins < 60) {
-    return `${diffMins} mins ago`;
-  } else if (diffHours < 24) {
-    return `${diffHours} hours ago`;
-  } else if (diffDays < 7) {
-    return `${diffDays} days ago`;
-  } else {
-    return date.toLocaleDateString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-    });
+const handleVote = async (value: 1 | -1) => {
+  if (!auth.isAuthenticated) {
+    showError('Please log in to vote')
+    return
   }
-})
+
+  const result = await questionStore.voteQuestion(props.question.id, value)
+
+  if (result.success) {
+    emit('voted')
+  } else {
+    showError(result.error || 'Failed to vote')
+  }
+}
+
+const formattedDate = computed(() => formatTimeAgo(props.question.createdAt))
 </script>
 
 <template>
@@ -42,10 +46,20 @@ const formattedDate = computed(() => {
         <div class="text-xs text-gray-500 font-medium">Votes</div>
         <div class="text-lg font-bold text-gray-800">{{ question.votes }}</div>
         <div class="flex gap-1 mt-1">
-          <Button variant="ghost" size="icon" class="h-6 w-6 hover:bg-green-50 hover:text-green-600 p-0">
+          <Button @click="handleVote(1)" variant="ghost" size="icon" :class="[
+            'h-6 w-6 p-0 transition-colors',
+            isUpvoted
+              ? 'bg-green-100 text-green-700 hover:bg-green-200'
+              : 'hover:bg-green-50 hover:text-green-600'
+          ]">
             <LucideChevronUp class="h-4 w-4" />
           </Button>
-          <Button variant="ghost" size="icon" class="h-6 w-6 hover:bg-red-50 hover:text-red-600 p-0">
+          <Button @click="handleVote(-1)" variant="ghost" size="icon" :class="[
+            'h-6 w-6 p-0 transition-colors',
+            isDownvoted
+              ? 'bg-red-100 text-red-700 hover:bg-red-200'
+              : 'hover:bg-red-50 hover:text-red-600'
+          ]">
             <LucideChevronDown class="h-4 w-4" />
           </Button>
         </div>

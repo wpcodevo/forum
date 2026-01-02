@@ -6,9 +6,9 @@ import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, Pagi
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Skeleton } from '~/components/ui/skeleton';
 import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
+import { useQuestionsQuery } from '~/stores/questions';
+import { useQuestionApi } from '~/composables/useQuestionApi';
 
-
-const questionStore = useQuestionStore()
 const pageOptions = reactive({
   page: 1,
   limit: 10
@@ -22,11 +22,47 @@ const queryParams = computed(() => ({
   sort: sortBy.value
 }))
 
-const { data: questionsData, total, pending: loading } = questionStore.useQuestions(queryParams)
+const { data: questionsData, isLoading: loading, refetch } = useQuestionsQuery(queryParams)
+
+const total = computed(() => questionsData.value?.total || 0)
+const questions = computed(() => questionsData.value?.items || [])
+
+onServerPrefetch(async () => {
+  const queryClient = useQueryClient()
+  const resolvedParams = toValue(queryParams)
+  const normalizedParams = {
+    ...resolvedParams,
+    page: resolvedParams.page || 1,
+    limit: resolvedParams.limit || 10,
+    sort: resolvedParams.sort || 'newest'
+  }
+
+  const { fetchQuestions } = useQuestionApi()
+  await queryClient.ensureQueryData({
+    queryKey: ['questions', normalizedParams],
+    queryFn: () => fetchQuestions(normalizedParams)
+  })
+})
 
 watch([sortBy, () => pageOptions.limit], () => {
   pageOptions.page = 1
 }, { immediate: false })
+
+const handleQuestionVoted = () => {
+  refetch()
+}
+useHead({
+  title: 'DevFlow - Top Questions',
+  meta: [
+    { name: 'description', content: 'Browse the latest technical questions and answers from the developer community. Find solutions, share knowledge, and connect with fellow developers.' },
+    { property: 'og:title', content: 'DevFlow - Top Questions' },
+    { property: 'og:description', content: 'Browse the latest technical questions and answers from the developer community.' },
+    { property: 'og:type', content: 'website' },
+    { name: 'twitter:card', content: 'summary' },
+    { name: 'twitter:title', content: 'DevFlow - Top Questions' },
+    { name: 'twitter:description', content: 'Browse the latest technical questions and answers from the developer community.' }
+  ]
+})
 </script>
 
 <template>
@@ -36,7 +72,7 @@ watch([sortBy, () => pageOptions.limit], () => {
         <h1 class="text-3xl font-bold tracking-tight">Top Questions</h1>
         <p class="text-muted-foreground">Explore the latest technical challenges from the community.</p>
       </div>
-      <Button size="lg">
+      <Button size="lg" as-child>
         <NuxtLink to="/questions/new">Ask Question</NuxtLink>
       </Button>
     </div>
@@ -61,9 +97,9 @@ watch([sortBy, () => pageOptions.limit], () => {
       <Skeleton v-for="i in 3" :key="i" class="h-40 w-full rounded-2xl" />
     </div>
     <div v-else class="grid gap-6">
-      <QuestionCard v-for="q in questionsData" :key="q.id" :question="q" />
+      <QuestionCard v-for="q in questions" :key="q.id" :question="q" @voted="handleQuestionVoted" />
 
-      <div v-if="questionsData.length === 0"
+      <div v-if="questions.length === 0"
         class="text-center py-24 bg-muted/20 border-2 border-dashed rounded-3xl border-muted">
         <div class="max-w-[320px] mx-auto space-y-4">
           <div class="h-16 w-16 rounded-full bg-muted flex items-center justify-center mx-auto">
@@ -82,7 +118,7 @@ watch([sortBy, () => pageOptions.limit], () => {
       </div>
     </div>
 
-    <div v-if="questionsData.length > 0" class="pt-10 border-t">
+    <div v-if="questions.length > 0" class="pt-10 border-t">
       <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
         <div class="flex items-center gap-2 order-2 sm:order-1">
           <span class="text-sm text-muted-foreground">Show</span>

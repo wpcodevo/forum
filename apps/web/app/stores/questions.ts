@@ -1,136 +1,122 @@
-import type { PaginateResponse, QueryQuestionByUserId, QueryQuestionParam, Question } from "~/types/question"
+import type { QueryQuestionByUserId, QueryQuestionParam, Question, PaginateResponse } from "~/types/question"
+import { useQuestionApi } from "~/composables/useQuestionApi"
+
+
+export const useQuestionsQuery = (params: QueryQuestionParam | ComputedRef<QueryQuestionParam> = {}) => {
+  const { fetchQuestions } = useQuestionApi()
+  const resolvedParams = computed(() => toValue(params))
+
+  const normalizedParams = computed(() => ({
+    page: resolvedParams.value.page || 1,
+    limit: resolvedParams.value.limit || 10,
+    sort: resolvedParams.value.sort || 'newest',
+    ...resolvedParams.value
+  }))
+
+  return useQuery({
+    queryKey: ['questions', normalizedParams],
+    queryFn: (): Promise<PaginateResponse<Question>> => fetchQuestions(normalizedParams.value),
+    select: (data: PaginateResponse<Question>) => ({
+      items: data.items,
+      total: data.total,
+      page: data.page,
+      limit: data.limit,
+      totalPages: data.totalPages
+    })
+  })
+}
+
+
+export const useUserQuestionsQuery = (params: QueryQuestionByUserId | ComputedRef<QueryQuestionByUserId> = {}) => {
+  const { fetchUserQuestions } = useQuestionApi()
+  const resolvedParams = computed(() => toValue(params))
+
+  const normalizedParams = computed(() => ({
+    page: resolvedParams.value.page || 1,
+    limit: resolvedParams.value.limit || 10,
+    includeAnswers: resolvedParams.value.includeAnswers || false,
+    ...resolvedParams.value
+  }))
+
+  return useQuery({
+    queryKey: ['questions', 'user', normalizedParams],
+    queryFn: (): Promise<PaginateResponse<Question>> => fetchUserQuestions(normalizedParams.value),
+    select: (data: PaginateResponse<Question>) => ({
+      items: data.items,
+      total: data.total,
+      page: data.page,
+      limit: data.limit,
+      totalPages: data.totalPages
+    })
+  })
+}
+
+
+export const useQuestionQuery = (id: string | ComputedRef<string>) => {
+  const { fetchQuestion } = useQuestionApi()
+  const questionId = computed(() => toValue(id))
+
+  return useQuery({
+    queryKey: ['question', questionId],
+    queryFn: (): Promise<Question> => fetchQuestion(questionId.value),
+    enabled: computed(() => !!questionId.value)
+  })
+}
+
 
 export const useQuestionStore = defineStore('questions', () => {
-  const questions = ref<Question[]>([])
-  const currentQuestion = ref<Question | null>(null)
-  const loading = ref(false)
-  const total = ref(0)
-  const { baseURL } = useConfig()
-
-  const { $fetchApi } = useApi()
+  const { voteQuestion: voteQuestionApi, createQuestion: createQuestionApi, submitAnswer: submitAnswerApi, updateQuestion: updateQuestionApi } = useQuestionApi()
+  const queryClient = useQueryClient()
   const auth = useAuthStore()
 
-  function useQuestions(params: QueryQuestionParam | ComputedRef<QueryQuestionParam> = {}) {
-    const queryKey = computed(() => {
-      const resolvedParams = toValue(params)
-      const normalizedParams = {
-        page: resolvedParams.page || 1,
-        limit: resolvedParams.limit || 10,
-        sort: resolvedParams.sort || 'newest',
-        ...resolvedParams
-      }
-
-      return `questions:${JSON.stringify(normalizedParams)}`
-    })
-
-    const { data, pending, refresh, error } = useFetch<PaginateResponse<Question>>(`${baseURL}/questions`, {
-      key: queryKey,
-      query: computed(() => toValue(params)),
-      credentials: 'include',
-      getCachedData(key) {
-        const nuxtApp = useNuxtApp()
-        return nuxtApp.payload.data[key]
-      },
-      onResponse({ response }) {
-        questions.value = response._data?.items || []
-        total.value = response._data?.total || 0
-      }
-    })
-
-    watch(data, (newData) => {
-      if (newData) {
-        questions.value = newData.items
-        total.value = newData.total
-      }
-    })
-
-    loading.value = pending.value
-
-    return {
-      data: computed(() => data.value?.items || []),
-      total: computed(() => data.value?.total || 0),
-      pending,
-      refresh,
-      error
+  const voteQuestionMutation = useMutation({
+    mutationFn: ({ id, value }: { id: string; value: 1 | -1 }): Promise<Question> => voteQuestionApi(id, value),
+    onSuccess: (_data: Question, variables: { id: string; value: 1 | -1 }) => {
+      // Invalidate and refetch related queries
+      queryClient.invalidateQueries({ queryKey: ['question', variables.id] })
+      queryClient.invalidateQueries({ queryKey: ['questions'] })
     }
-  }
+  })
 
-  function useUserQuestions(params: QueryQuestionByUserId | ComputedRef<QueryQuestionByUserId> = {}) {
-    const queryKey = computed(() => {
-      const resolvedParams = toValue(params)
-      const normalizedParams = {
-        page: resolvedParams.page || 1,
-        limit: resolvedParams.limit || 10,
-        includeAnswers: resolvedParams.includeAnswers || false,
-        ...resolvedParams
-      }
-
-      return `questions:user:${JSON.stringify(normalizedParams)}`
-    })
-
-    const { data, pending, refresh, error } = useFetch<PaginateResponse<Question>>(`${baseURL}/questions/user`, {
-      key: queryKey,
-      query: computed(() => toValue(params)),
-      credentials: 'include',
-      getCachedData(key) {
-        const nuxtApp = useNuxtApp()
-        return nuxtApp.payload.data[key]
-      },
-      onResponse({ response }) {
-        questions.value = response._data?.items || []
-        total.value = response._data?.total || 0
-      }
-    })
-
-    watch(data, (newData) => {
-      if (newData) {
-        questions.value = newData.items
-        total.value = newData.total
-      }
-    })
-
-    loading.value = pending.value
-
-    return {
-      data: computed(() => data.value?.items || []),
-      total: computed(() => data.value?.total || 0),
-      pending,
-      refresh,
-      error
+  const createQuestionMutation = useMutation({
+    mutationFn: (payload: { title: string; content: string; tags: string[] }): Promise<Question> => createQuestionApi(payload),
+    onSuccess: () => {
+      // Invalidate questions list to show the new question
+      queryClient.invalidateQueries({ queryKey: ['questions'] })
     }
-  }
+  })
 
-  function useQuestion(id: string) {
-    const { data, pending, refresh, error } = useFetch<Question>(`${baseURL}/questions/${id}`, {
-      key: `question:${id}`,
-      credentials: 'include',
-      getCachedData(key) {
-        const nuxtAuth = useNuxtApp()
-        return nuxtAuth.payload.data[key]
-      },
-      onResponse({ response }) {
-        currentQuestion.value = response._data || null
+  const submitAnswerMutation = useMutation({
+    mutationFn: ({ questionId, content }: { questionId: string; content: string }): Promise<void> =>
+      submitAnswerApi(questionId, content),
+    onSuccess: (_data: void, variables: { questionId: string; content: string }) => {
+      // Invalidate the question to show the new answer
+      queryClient.invalidateQueries({ queryKey: ['question', variables.questionId] })
+    }
+  })
+
+  async function voteQuestion(id: string, value: 1 | -1) {
+    if (!auth.isAuthenticated) {
+      return {
+        success: false,
+        error: 'You must be logged in to vote'
       }
-    })
+    }
 
-    watch(data, (newData) => {
-      currentQuestion.value = newData || null
-    })
-
-    loading.value = pending.value
-
-    return {
-      data, pending, refresh, error
+    try {
+      await voteQuestionMutation.mutateAsync({ id, value })
+      return { success: true }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.data?.message || error.message || 'Failed to vote'
+      }
     }
   }
 
   async function createQuestion(payload: { title: string; content: string; tags: string[] }) {
     try {
-      const data = await $fetchApi<Question>('/questions', {
-        method: 'POST',
-        body: payload
-      })
-      questions.value.unshift(data)
+      const data = await createQuestionMutation.mutateAsync(payload)
       return { success: true, data }
     } catch (error: any) {
       return {
@@ -140,37 +126,9 @@ export const useQuestionStore = defineStore('questions', () => {
     }
   }
 
-  async function voteQuestion(id: string, value: 1 | -1) {
-    if (!auth.user) {
-      return navigateTo('/login')
-    }
-
-    try {
-      await $fetchApi(`/questions/${id}/vote`, {
-        method: 'PATCH',
-        body: { value }
-      })
-
-      await refreshNuxtData(`question:${id}`)
-
-      return { success: true }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.data?.message || 'Voting failed'
-      }
-    }
-  }
-
   async function submitAnswer(questionId: string, content: string) {
     try {
-      await $fetchApi(`/answers/question/${questionId}`, {
-        method: 'POST',
-        body: { content }
-      })
-
-      await refreshNuxtData(`question:${questionId}`)
-
+      await submitAnswerMutation.mutateAsync({ questionId, content })
       return { success: true }
     } catch (error: any) {
       return {
@@ -180,22 +138,36 @@ export const useQuestionStore = defineStore('questions', () => {
     }
   }
 
-  function refreshQuestions(params: any = {}) {
-    const queryKey = `questions:${JSON.stringify(params)}`
-    return refreshNuxtData(queryKey)
+  const updateQuestionMutation = useMutation({
+    mutationFn: ({ id, payload }: { id: string; payload: { title?: string; content?: string } }): Promise<Question> =>
+      updateQuestionApi(id, payload),
+    onSuccess: (_data: Question, variables: { id: string; payload: { title?: string; content?: string } }) => {
+      // Invalidate questions list and the specific question
+      queryClient.invalidateQueries({ queryKey: ['question', variables.id] })
+      queryClient.invalidateQueries({ queryKey: ['questions'] })
+    }
+  })
+
+  async function updateQuestion(id: string, payload: { title?: string; content?: string }) {
+    try {
+      const data = await updateQuestionMutation.mutateAsync({ id, payload })
+      return { success: true, data }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.data?.message || 'Failed to update question'
+      }
+    }
   }
 
   return {
-    questions,
-    currentQuestion,
-    loading,
-    total,
-    useQuestions,
-    useUserQuestions,
-    useQuestion,
-    createQuestion,
     voteQuestion,
+    createQuestion,
     submitAnswer,
-    refreshQuestions
+    updateQuestion,
+    voteQuestionMutation,
+    createQuestionMutation,
+    submitAnswerMutation,
+    updateQuestionMutation
   }
 })

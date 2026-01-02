@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { User } from "./user.entity";
 import { Answer } from "./answer.entity";
+import { QuestionVote } from "./question-vote.entity";
 
 @Entity("questions")
 export class Question {
@@ -27,6 +28,9 @@ export class Question {
 
   @OneToMany(() => Answer, (answer) => answer.question)
   answers: Answer[]
+
+  @OneToMany(() => QuestionVote, (vote) => vote.question)
+  voteRecords: QuestionVote[]
 
   @CreateDateColumn()
   createdAt: Date

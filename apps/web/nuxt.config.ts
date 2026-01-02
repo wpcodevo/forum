@@ -4,7 +4,19 @@ import tailwindcss from "@tailwindcss/vite";
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
-  modules: ['shadcn-nuxt', '@pinia/nuxt', 'nuxt-lucide-icons'],
+  modules: ['shadcn-nuxt', '@pinia/nuxt', 'nuxt-lucide-icons', '@peterbud/nuxt-query'],
+  nuxtQuery: {
+    autoImports: ['useQuery', 'useMutation', 'useQueryClient'],
+    devtools: true,
+    queryClientOptions: {
+      defaultOptions: {
+        queries: {
+          refetchOnWindowFocus: false,
+          staleTime: 1000 * 60, // 1 minute
+        }
+      },
+    },
+  },
   css: ['./app/assets/css/main.css'],
   vite: {
     plugins: [

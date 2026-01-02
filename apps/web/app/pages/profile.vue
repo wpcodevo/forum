@@ -9,6 +9,9 @@ import { Skeleton } from '~/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Textarea } from '~/components/ui/textarea';
 import { formatDate } from '~/lib/utils';
+import { useUserQuestionsQuery } from '~/stores/questions';
+import { useQuestionApi } from '~/composables/useQuestionApi';
+import type { QueryQuestionByUserId } from '~/types/question';
 
 const auth = useAuthStore()
 const questionStore = useQuestionStore()
@@ -18,12 +21,36 @@ const pageOptions = reactive({
   limit: 10,
 })
 
-const params = computed(() => ({
+const params = computed<QueryQuestionByUserId>(() => ({
   page: pageOptions.page,
   limit: pageOptions.limit
 }))
 
-const { pending: loading, data: questions } = questionStore.useUserQuestions(params)
+const { data: questionsData, isLoading: loading, refetch } = useUserQuestionsQuery(params)
+
+const questions = computed(() => questionsData.value?.items || [])
+
+// Prefetch on server to ensure data is available during SSR
+onServerPrefetch(async () => {
+  const queryClient = useQueryClient()
+  const resolvedParams = toValue(params)
+  const normalizedParams: QueryQuestionByUserId = {
+    ...resolvedParams,
+    page: resolvedParams.page || 1,
+    limit: resolvedParams.limit || 10,
+    includeAnswers: resolvedParams.includeAnswers ?? false
+  }
+
+  const { fetchUserQuestions } = useQuestionApi()
+  await queryClient.ensureQueryData({
+    queryKey: ['questions', 'user', normalizedParams],
+    queryFn: () => fetchUserQuestions(normalizedParams)
+  })
+})
+
+const handleQuestionVoted = () => {
+  refetch()
+}
 </script>
 
 <template>
@@ -144,7 +171,7 @@ const { pending: loading, data: questions } = questionStore.useUserQuestions(par
         </template>
         <template v-else>
           <div class="grid gap-6">
-            <QuestionCard v-for="q in questions" :key="q.id" :question="q" />
+            <QuestionCard v-for="q in questions" :key="q.id" :question="q" @voted="handleQuestionVoted" />
           </div>
 
           <template v-if="questions.length === 0">

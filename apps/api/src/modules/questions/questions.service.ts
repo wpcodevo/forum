@@ -3,6 +3,7 @@ import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Question } from 'src/database/entities/question.entity';
 import { Answer } from 'src/database/entities/answer.entity';
+import { QuestionVote } from 'src/database/entities/question-vote.entity';
 import { Repository } from 'typeorm';
 import { CreateQuestionDto } from './dtos/create-question.dto';
 import { Cache } from 'cache-manager';
@@ -17,6 +18,7 @@ import { QueryQuestionByUserIdDto, SortBy } from './dtos/query-question.dto';
 export class QuestionsService {
   constructor(
     @InjectRepository(Question) private questionsRepository: Repository<Question>,
+    @InjectRepository(QuestionVote) private questionVotesRepository: Repository<QuestionVote>,
     private eventEmitter: EventEmitter2,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private usersService: UsersService
@@ -44,8 +46,8 @@ export class QuestionsService {
     return saved
   }
 
-  async findAll(page = 1, limit = 10, search?: string, sort: SortBy = 'newest') {
-    const cacheKey = `questions_list_p${page}_l${limit}_s${search || ""}_${sort}`
+  async findAll(page = 1, limit = 10, search?: string, sort: SortBy = 'newest', userId?: string) {
+    const cacheKey = `questions_list_p${page}_l${limit}_s${search || ""}_${sort}_u${userId || ""}`
     const cachedData = await this.cacheManager.get(cacheKey)
 
     if (cachedData) {
@@ -112,13 +114,29 @@ export class QuestionsService {
       })
     }
 
+    // Get user votes if userId is provided
+    const userVotes: Record<string, number> = {}
+    if (userId && questionIds.length > 0) {
+      const votes = await this.questionVotesRepository
+        .createQueryBuilder("vote")
+        .leftJoinAndSelect("vote.question", "question")
+        .where("vote.user.id = :userId", { userId })
+        .andWhere("question.id IN (:...questionIds)", { questionIds })
+        .getMany()
+
+      votes.forEach(vote => {
+        userVotes[vote.question.id] = vote.value
+      })
+    }
+
     const result = {
       items: items.map(i => {
         const { author, ...rest } = i
         return {
           ...rest,
           author: author ? { id: author.id, username: author.username, name: author.name } : null,
-          answerCount: answerCounts[i.id] || 0
+          answerCount: answerCounts[i.id] || 0,
+          userVote: userId ? (userVotes[i.id] || null) : null
         }
       }),
       total,
@@ -132,9 +150,9 @@ export class QuestionsService {
     return result
   }
 
-  async findOne(id: string) {
-    const cacheKey = `question_${id}`
-    const cachedData = await this.cacheManager.get<Question>(cacheKey)
+  async findOne(id: string, userId?: string) {
+    const cacheKey = `question_${id}_u${userId || ""}`
+    const cachedData = await this.cacheManager.get(cacheKey)
 
     if (cachedData) {
       await this.incrementViews(id)
@@ -147,9 +165,48 @@ export class QuestionsService {
 
     await this.incrementViews(id)
 
-    await this.cacheManager.set(cacheKey, question, 60000)
+    let userVote: number | null = null
+    if (userId) {
+      const vote = await this.questionVotesRepository.findOne({
+        where: {
+          question: { id },
+          user: { id: userId }
+        }
+      })
+      userVote = vote ? vote.value : null
+    }
 
-    return question
+    // Format question author
+    const { author: questionAuthor, answers, ...questionRest } = question
+    const formattedQuestionAuthor = questionAuthor ? {
+      id: questionAuthor.id,
+      username: questionAuthor.username,
+      name: questionAuthor.name
+    } : null
+
+    // Format answers with author information
+    const formattedAnswers = answers?.map(answer => {
+      const { author, ...answerRest } = answer
+      return {
+        ...answerRest,
+        author: author ? {
+          id: author.id,
+          username: author.username,
+          name: author.name
+        } : null
+      }
+    }) || []
+
+    const result = {
+      ...questionRest,
+      author: formattedQuestionAuthor,
+      answers: formattedAnswers,
+      userVote
+    }
+
+    await this.cacheManager.set(cacheKey, result, 60000)
+
+    return result
   }
 
   async vote(id: string, data: VoteAnswerDto, userId: string) {
@@ -161,14 +218,72 @@ export class QuestionsService {
       throw new ForbiddenException("You cannot vote on your own question")
     }
 
-    question.votes += data.value
+    // Find existing vote from this user
+    const existingVote = await this.questionVotesRepository.findOne({
+      where: {
+        question: { id },
+        user: { id: userId }
+      }
+    })
+
+    let oldVoteValue = 0
+    let newVoteValue = data.value
+
+    if (existingVote) {
+      oldVoteValue = existingVote.value
+
+      // If clicking the same vote again, remove it (toggle off)
+      if (data.value === existingVote.value) {
+        await this.questionVotesRepository.remove(existingVote)
+        newVoteValue = 0
+      } else {
+        // Change vote to opposite direction
+        existingVote.value = data.value
+        await this.questionVotesRepository.save(existingVote)
+      }
+    } else if (data.value !== 0) {
+      // Create new vote
+      const newVote = this.questionVotesRepository.create({
+        user: { id: userId },
+        question: { id },
+        value: data.value
+      })
+      await this.questionVotesRepository.save(newVote)
+    }
+
+    // Recalculate total votes from all vote records
+    const voteSum = await this.questionVotesRepository
+      .createQueryBuilder("vote")
+      .select("COALESCE(SUM(vote.value), 0)", "sum")
+      .where("vote.question.id = :questionId", { questionId: id })
+      .getRawOne()
+
+    question.votes = parseInt(String(voteSum?.sum || 0), 10) || 0
     await this.questionsRepository.save(question)
 
-    if (data.value === 1) {
+    // Handle reputation changes based on vote transitions
+    // Upvote: +10 reputation, Downvote: -2 reputation
+    if (oldVoteValue === 0 && newVoteValue === 1) {
+      // New upvote
       await this.usersService.incrementReputation(question.author.id, 10)
-    } else if (data.value === -1) {
+    } else if (oldVoteValue === 0 && newVoteValue === -1) {
+      // New downvote
       await this.usersService.incrementReputation(question.author.id, -2)
+    } else if (oldVoteValue === 1 && newVoteValue === 0) {
+      // Upvote removed
+      await this.usersService.incrementReputation(question.author.id, -10)
+    } else if (oldVoteValue === -1 && newVoteValue === 0) {
+      // Downvote removed
+      await this.usersService.incrementReputation(question.author.id, 2)
+    } else if (oldVoteValue === 1 && newVoteValue === -1) {
+      // Upvote changed to downvote: -10 (remove) + -2 (add) = -12
+      await this.usersService.incrementReputation(question.author.id, -12)
+    } else if (oldVoteValue === -1 && newVoteValue === 1) {
+      // Downvote changed to upvote: +2 (remove) + +10 (add) = +12
+      await this.usersService.incrementReputation(question.author.id, 12)
     }
+
+    await this.clearQuestionCache()
 
     return question
   }

@@ -15,6 +15,7 @@ export interface Answer {
   isAccepted: boolean;
   createdAt: Date;
   updatedAt: Date;
+  author?: User;
 }
 
 export interface Question {
@@ -27,6 +28,7 @@ export interface Question {
   answers: Answer[],
   answerCount: number
   author: User,
+  userVote: number | null; // 1 for upvote, -1 for downvote, null for no vote
   updatedAt: Date;
   createdAt: Date
 }

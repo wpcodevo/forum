@@ -7,7 +7,7 @@ export default defineNuxtRouteMiddleware(async (to, from) => {
 
   // Public routes that don't require authentication
   const publicRoutes = ["/", "/tags"]
-  const publicRoutePatterns = [/^\/questions\/\d+$/] // /questions/:id
+  const publicRoutePatterns = [/^\/questions\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i] // /questions/:id (UUID format, viewing questions only, /questions/new requires auth)
 
   // Check if current route is public
   const isPublicRoute = publicRoutes.includes(to.path) ||
