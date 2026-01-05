@@ -8,34 +8,34 @@ import { Card, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { formatTimeAgo } from '~/lib/utils';
 
 const props = defineProps<{ question: Question }>()
-const emit = defineEmits<{
-  voted: []
-}>()
 
 const questionStore = useQuestionStore()
 const { showError } = useToast()
-const auth = useAuthStore()
+const queryClient = useQueryClient()
+const { fetchQuestion } = useQuestionApi()
 
-const userVote = computed(() => props.question.userVote ?? null)
-const isUpvoted = computed(() => userVote.value === 1)
-const isDownvoted = computed(() => userVote.value === -1)
+const isUpvoted = computed(() => props.question.userVote === 1)
+const isDownvoted = computed(() => props.question.userVote === -1)
 
 const handleVote = async (value: 1 | -1) => {
-  if (!auth.isAuthenticated) {
-    showError('Please log in to vote')
-    return
-  }
-
   const result = await questionStore.voteQuestion(props.question.id, value)
 
-  if (result.success) {
-    emit('voted')
-  } else {
+  if (result.error) {
     showError(result.error || 'Failed to vote')
   }
 }
 
-const formattedDate = computed(() => formatTimeAgo(props.question.createdAt))
+
+const prefetchQuestion = () => {
+  const cachedData = queryClient.getQueryData(['question', props.question.id])
+  if (!cachedData) {
+    queryClient.prefetchQuery({
+      queryKey: ['question', props.question.id],
+      queryFn: () => fetchQuestion(props.question.id),
+      staleTime: 1000 * 60 * 5, // 5 minutes
+    })
+  }
+}
 </script>
 
 <template>
@@ -67,7 +67,8 @@ const formattedDate = computed(() => formatTimeAgo(props.question.createdAt))
 
       <div class="flex-1 space-y-2.5 min-w-0">
         <CardTitle class="text-lg font-semibold leading-tight text-gray-900 mb-1">
-          <NuxtLink :to="`/questions/${question.id}`" class="hover:text-blue-600 transition-colors text-[#1a0dab]">
+          <NuxtLink :to="`/questions/${question.id}`" class="hover:text-blue-600 transition-colors text-[#1a0dab]"
+            @mouseenter="prefetchQuestion" @focus="prefetchQuestion">
             {{ question.title }}
           </NuxtLink>
         </CardTitle>
@@ -96,7 +97,7 @@ const formattedDate = computed(() => formatTimeAgo(props.question.createdAt))
                 {{ question.author.name || 'Anonymous' }}
               </span>
               <span class="text-gray-400">•</span>
-              <span class="text-gray-500">{{ formattedDate }}</span>
+              <span class="text-gray-500">{{ formatTimeAgo(question.createdAt) }}</span>
             </div>
           </div>
 

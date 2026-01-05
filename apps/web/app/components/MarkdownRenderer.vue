@@ -1,13 +1,12 @@
 <script setup lang="ts">
 import { marked } from 'marked'
 import hljs from 'highlight.js'
-import 'highlight.js/styles/github-dark.css' // You can change the theme
+import 'highlight.js/styles/github-dark.css'
 
 const props = defineProps<{
   content: string
 }>()
 
-// Configure marked renderer once on component setup
 const renderer = new marked.Renderer()
 renderer.code = function ({ text, lang, escaped }) {
   if (lang && hljs.getLanguage(lang)) {
@@ -22,7 +21,6 @@ renderer.code = function ({ text, lang, escaped }) {
   return `<pre><code class="hljs">${highlighted}</code></pre>`
 }
 
-// Configure marked options once
 marked.setOptions({
   breaks: true,
   gfm: true,

@@ -1,9 +1,12 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { User } from "./user.entity";
 import { Answer } from "./answer.entity";
 import { QuestionVote } from "./question-vote.entity";
 
 @Entity("questions")
+@Index(["createdAt"])
+@Index(["views"])
+@Index(["author"])
 export class Question {
   @PrimaryGeneratedColumn("uuid")
   id: string

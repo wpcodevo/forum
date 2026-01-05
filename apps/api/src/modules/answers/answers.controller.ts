@@ -1,12 +1,11 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Req, UseGuards } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { AnswersService } from './answers.service';
-import { ThrottlerGuard } from '@nestjs/throttler';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { CreateAnswerDto, VoteAnswerDto } from './dtos/answer.dto';
+import { QueryAnswerByUserIdDto } from './dtos/query-answer.dto';
 import { ApiBearerAuth } from '@nestjs/swagger';
 
 @Controller('answers')
-@UseGuards(ThrottlerGuard)
 export class AnswersController {
   constructor(private readonly answersService: AnswersService) { }
 
@@ -15,6 +14,13 @@ export class AnswersController {
   @UseGuards(JwtAuthGuard)
   create(@Param("questionId", ParseUUIDPipe) questionId: string, @Body() body: CreateAnswerDto, @Req() req: any) {
     return this.answersService.create(questionId, body, req.user)
+  }
+
+  @Get("user")
+  @ApiBearerAuth()
+  @UseGuards(JwtAuthGuard)
+  findByUserId(@Query() query: QueryAnswerByUserIdDto, @Req() req: { user: { sub: string } }) {
+    return this.answersService.findByUserId(query, req.user.sub)
   }
 
   @Get("question/:questionId")

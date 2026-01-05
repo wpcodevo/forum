@@ -4,14 +4,16 @@ import { useQuestionApi } from "~/composables/useQuestionApi"
 
 export const useQuestionsQuery = (params: QueryQuestionParam | ComputedRef<QueryQuestionParam> = {}) => {
   const { fetchQuestions } = useQuestionApi()
-  const resolvedParams = computed(() => toValue(params))
 
-  const normalizedParams = computed(() => ({
-    page: resolvedParams.value.page || 1,
-    limit: resolvedParams.value.limit || 10,
-    sort: resolvedParams.value.sort || 'newest',
-    ...resolvedParams.value
-  }))
+  const normalizedParams = computed(() => {
+    const resolved = toValue(params)
+    return {
+      page: resolved.page || 1,
+      limit: resolved.limit || 10,
+      sort: resolved.sort || 'newest',
+      ...resolved
+    }
+  })
 
   return useQuery({
     queryKey: ['questions', normalizedParams],
@@ -29,14 +31,16 @@ export const useQuestionsQuery = (params: QueryQuestionParam | ComputedRef<Query
 
 export const useUserQuestionsQuery = (params: QueryQuestionByUserId | ComputedRef<QueryQuestionByUserId> = {}) => {
   const { fetchUserQuestions } = useQuestionApi()
-  const resolvedParams = computed(() => toValue(params))
 
-  const normalizedParams = computed(() => ({
-    page: resolvedParams.value.page || 1,
-    limit: resolvedParams.value.limit || 10,
-    includeAnswers: resolvedParams.value.includeAnswers || false,
-    ...resolvedParams.value
-  }))
+  const normalizedParams = computed(() => {
+    const resolved = toValue(params)
+    return {
+      page: resolved.page || 1,
+      limit: resolved.limit || 10,
+      includeAnswers: resolved.includeAnswers || false,
+      ...resolved
+    }
+  })
 
   return useQuery({
     queryKey: ['questions', 'user', normalizedParams],
@@ -59,13 +63,15 @@ export const useQuestionQuery = (id: string | ComputedRef<string>) => {
   return useQuery({
     queryKey: ['question', questionId],
     queryFn: (): Promise<Question> => fetchQuestion(questionId.value),
-    enabled: computed(() => !!questionId.value)
+    enabled: computed(() => !!questionId.value),
+    staleTime: 1000 * 60 * 5, // 5 minutes - data is fresh for 5 minutes
+    gcTime: 1000 * 60 * 10, // 10 minutes - keep in cache for 10 minutes (formerly cacheTime)
   })
 }
 
 
 export const useQuestionStore = defineStore('questions', () => {
-  const { voteQuestion: voteQuestionApi, createQuestion: createQuestionApi, submitAnswer: submitAnswerApi, updateQuestion: updateQuestionApi } = useQuestionApi()
+  const { voteQuestion: voteQuestionApi, createQuestion: createQuestionApi, updateQuestion: updateQuestionApi } = useQuestionApi()
   const queryClient = useQueryClient()
   const auth = useAuthStore()
 
@@ -83,15 +89,6 @@ export const useQuestionStore = defineStore('questions', () => {
     onSuccess: () => {
       // Invalidate questions list to show the new question
       queryClient.invalidateQueries({ queryKey: ['questions'] })
-    }
-  })
-
-  const submitAnswerMutation = useMutation({
-    mutationFn: ({ questionId, content }: { questionId: string; content: string }): Promise<void> =>
-      submitAnswerApi(questionId, content),
-    onSuccess: (_data: void, variables: { questionId: string; content: string }) => {
-      // Invalidate the question to show the new answer
-      queryClient.invalidateQueries({ queryKey: ['question', variables.questionId] })
     }
   })
 
@@ -126,18 +123,6 @@ export const useQuestionStore = defineStore('questions', () => {
     }
   }
 
-  async function submitAnswer(questionId: string, content: string) {
-    try {
-      await submitAnswerMutation.mutateAsync({ questionId, content })
-      return { success: true }
-    } catch (error: any) {
-      return {
-        success: false,
-        error: error.data?.message || 'Failed to submit answer'
-      }
-    }
-  }
-
   const updateQuestionMutation = useMutation({
     mutationFn: ({ id, payload }: { id: string; payload: { title?: string; content?: string } }): Promise<Question> =>
       updateQuestionApi(id, payload),
@@ -163,11 +148,9 @@ export const useQuestionStore = defineStore('questions', () => {
   return {
     voteQuestion,
     createQuestion,
-    submitAnswer,
     updateQuestion,
     voteQuestionMutation,
     createQuestionMutation,
-    submitAnswerMutation,
     updateQuestionMutation
   }
 })

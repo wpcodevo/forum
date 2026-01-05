@@ -1,56 +1,144 @@
 <script setup lang="ts">
-import { LucideSettings } from 'lucide-vue-next';
+import { Loader2, LucideCalendar, LucideCheckCircle, LucideHelpCircle, LucideMessageSquare, LucideSettings, LucideStar } from 'lucide-vue-next';
+import MarkdownRenderer from '~/components/MarkdownRenderer.vue';
+import QuestionCard from '~/components/QuestionCard.vue';
 import { Avatar, AvatarFallback, AvatarImage } from '~/components/ui/avatar';
 import { Button } from '~/components/ui/button';
+import { Card, CardHeader } from '~/components/ui/card';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from '~/components/ui/dialog';
 import { Input } from '~/components/ui/input';
 import { Label } from '~/components/ui/label';
+import { Pagination, PaginationContent, PaginationEllipsis, PaginationItem, PaginationNext, PaginationPrevious } from '~/components/ui/pagination';
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from '~/components/ui/select';
 import { Skeleton } from '~/components/ui/skeleton';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { Textarea } from '~/components/ui/textarea';
-import { formatDate } from '~/lib/utils';
-import { useUserQuestionsQuery } from '~/stores/questions';
+import { useAnswerApi } from '~/composables/useAnswerApi';
 import { useQuestionApi } from '~/composables/useQuestionApi';
-import type { QueryQuestionByUserId } from '~/types/question';
+import { useToast } from '~/composables/useToast';
+import { formatDate, formatTimeAgo } from '~/lib/utils';
+import { useUserAnswersQuery } from '~/stores/answers';
+import { useUserQuestionsQuery } from '~/stores/questions';
+import type { QueryAnswerByUserId, QueryQuestionByUserId } from '~/types/question';
 
 const auth = useAuthStore()
-const questionStore = useQuestionStore()
+const { showPromise, showError } = useToast()
+
+const isSettingsOpen = ref(false)
+const updatingProfile = ref(false)
+const profileForm = reactive({
+  name: '',
+  username: '',
+  bio: ''
+})
+
+const isFormValid = computed(() => {
+  return profileForm.name.trim().length >= 3 &&
+    profileForm.username.trim().length >= 3 &&
+    (!profileForm.bio || profileForm.bio.length <= 500)
+})
+
+
+watch(isSettingsOpen, (isOpen) => {
+  if (isOpen && auth.user) {
+    profileForm.name = auth.user.name || ''
+    profileForm.username = auth.user.username || ''
+    profileForm.bio = auth.user.bio || ''
+  }
+})
+
+const handleUpdateProfile = async () => {
+  if (!isFormValid.value) {
+    showError('Please fill in all required fields correctly')
+    return
+  }
+
+  updatingProfile.value = true
+
+  const updatePromise = auth.updateProfile({
+    name: profileForm.name.trim(),
+    username: profileForm.username.trim(),
+    bio: profileForm.bio.trim() || undefined
+  }).then((result) => {
+    if (result.success) {
+      return result
+    } else {
+      throw new Error(result.error || 'Failed to update profile')
+    }
+  })
+
+  showPromise(updatePromise, {
+    loading: 'Updating your profile...',
+    success: () => {
+      updatingProfile.value = false
+      isSettingsOpen.value = false
+      return 'Your profile has been updated successfully!'
+    },
+    error: (error: Error) => {
+      updatingProfile.value = false
+      return error.message || 'Failed to update profile. Please try again.'
+    },
+  })
+}
 const pageSizeOptions = [10, 20, 30, 40, 50]
-const pageOptions = reactive({
+const questionPageOptions = reactive({
+  page: 1,
+  limit: 10,
+})
+const answerPageOptions = reactive({
   page: 1,
   limit: 10,
 })
 
-const params = computed<QueryQuestionByUserId>(() => ({
-  page: pageOptions.page,
-  limit: pageOptions.limit
+const questionParams = computed<QueryQuestionByUserId>(() => ({
+  page: questionPageOptions.page,
+  limit: questionPageOptions.limit
 }))
 
-const { data: questionsData, isLoading: loading, refetch } = useUserQuestionsQuery(params)
+const answerParams = computed<QueryAnswerByUserId>(() => ({
+  page: answerPageOptions.page,
+  limit: answerPageOptions.limit
+}))
+
+const { data: questionsData, isLoading: questionsLoading } = useUserQuestionsQuery(questionParams)
+const { data: answersData, isLoading: answersLoading } = useUserAnswersQuery(answerParams)
 
 const questions = computed(() => questionsData.value?.items || [])
+const answers = computed(() => answersData.value?.items || [])
+const questionsTotal = computed(() => questionsData.value?.total || 0)
+const answersTotal = computed(() => answersData.value?.total || 0)
 
-// Prefetch on server to ensure data is available during SSR
 onServerPrefetch(async () => {
   const queryClient = useQueryClient()
-  const resolvedParams = toValue(params)
-  const normalizedParams: QueryQuestionByUserId = {
-    ...resolvedParams,
-    page: resolvedParams.page || 1,
-    limit: resolvedParams.limit || 10,
-    includeAnswers: resolvedParams.includeAnswers ?? false
+  const { fetchUserQuestions } = useQuestionApi()
+  const { fetchUserAnswers } = useAnswerApi()
+
+  const resolvedQuestionParams = toValue(questionParams)
+  const normalizedQuestionParams: QueryQuestionByUserId = {
+    ...resolvedQuestionParams,
+    page: resolvedQuestionParams.page || 1,
+    limit: resolvedQuestionParams.limit || 10,
+    includeAnswers: resolvedQuestionParams.includeAnswers ?? false
   }
 
-  const { fetchUserQuestions } = useQuestionApi()
-  await queryClient.ensureQueryData({
-    queryKey: ['questions', 'user', normalizedParams],
-    queryFn: () => fetchUserQuestions(normalizedParams)
-  })
-})
+  const resolvedAnswerParams = toValue(answerParams)
+  const normalizedAnswerParams: QueryAnswerByUserId = {
+    ...resolvedAnswerParams,
+    page: resolvedAnswerParams.page || 1,
+    limit: resolvedAnswerParams.limit || 10
+  }
 
-const handleQuestionVoted = () => {
-  refetch()
-}
+  await Promise.all([
+    queryClient.ensureQueryData({
+      queryKey: ['questions', 'user', normalizedQuestionParams],
+      queryFn: () => fetchUserQuestions(normalizedQuestionParams)
+    }),
+    queryClient.ensureQueryData({
+      queryKey: ['answers', 'user', normalizedAnswerParams],
+      queryFn: () => fetchUserAnswers(normalizedAnswerParams)
+    })
+  ])
+})
 </script>
 
 <template>
@@ -78,7 +166,7 @@ const handleQuestionVoted = () => {
             </p>
           </div>
 
-          <Dialog>
+          <Dialog v-model:open="isSettingsOpen">
             <DialogTrigger as-child>
               <Button variant="outline" class="gap-2 h-11 px-6 font-semibold">
                 <LucideSettings class="h-4 w-4" />
@@ -91,31 +179,43 @@ const handleQuestionVoted = () => {
                 <DialogDescription>Update your personal information</DialogDescription>
               </DialogHeader>
 
-              <div class="grid gap-6 py-6">
-                <div class="space-y-2">
-                  <Label for="name" class="font-bold">Name</Label>
-                  <Input id="name" class="h-12" placeholder="John Doe" />
+              <form @submit.prevent="handleUpdateProfile">
+                <div class="grid gap-6 py-6">
+                  <div class="space-y-2">
+                    <Label for="name" class="font-bold">Name</Label>
+                    <Input id="name" v-model="profileForm.name" class="h-12" placeholder="John Doe" required
+                      minlength="3" maxlength="50" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="username" class="font-bold">Username</Label>
+                    <Input id="username" v-model="profileForm.username" class="h-12" placeholder="johndoe" required
+                      minlength="3" maxlength="30" />
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="bio" class="font-bold">Bio</Label>
+                    <Textarea id="bio" v-model="profileForm.bio" class="min-h-[120px]"
+                      placeholder="Describe your technical expertise, areas of interest, and experience. What kind of questions can you help with?"
+                      maxlength="500" />
+                    <p class="text-xs text-muted-foreground">{{ (profileForm.bio || '').length }} / 500</p>
+                  </div>
+                  <div class="space-y-2">
+                    <Label for="avatar" class="font-bold">Upload Avatar</Label>
+                    <Input id="avatar" type="file" accept="image/*" disabled class="opacity-50" />
+                    <p class="text-xs text-muted-foreground">Avatar upload coming soon</p>
+                  </div>
                 </div>
-                <div class="space-y-2">
-                  <Label for="username" class="font-bold">Username</Label>
-                  <Input id="username" class="h-12" placeholder="johndoe" />
-                </div>
-                <div class="space-y-2">
-                  <Label for="bio" class="font-bold">Bio</Label>
-                  <Textarea id="bio" class="h-12"
-                    placeholder="Describe your technical expertise, areas of interest, and experience. What kind of questions can you help with?" />
-                </div>
-                <div class="space-y-2">
-                  <Label for="avatar" class="font-bold">Upload Avatar</Label>
-                  <Input id="avatar" type="file" />
-                </div>
-              </div>
 
-              <DialogFooter>
-                <Button type="submit" size="lg" class="w-full sm:w-auto px-8">
-                  Save
-                </Button>
-              </DialogFooter>
+                <DialogFooter>
+                  <Button type="button" variant="outline" @click="isSettingsOpen = false" :disabled="updatingProfile">
+                    Cancel
+                  </Button>
+                  <Button type="submit" size="lg" class="w-full sm:w-auto px-8"
+                    :disabled="updatingProfile || !isFormValid">
+                    <Loader2 v-if="updatingProfile" class="mr-2 h-4 w-4 animate-spin" />
+                    {{ updatingProfile ? 'Saving...' : 'Save Changes' }}
+                  </Button>
+                </DialogFooter>
+              </form>
             </DialogContent>
           </Dialog>
         </div>
@@ -164,14 +264,14 @@ const handleQuestionVoted = () => {
       </TabsList>
 
       <TabsContent value="questions" class="py-10">
-        <template v-if="loading">
+        <template v-if="questionsLoading">
           <div class="space-y-6">
             <Skeleton v-for="i in 3" :key="i" class="h-40 w-full rounded-2xl" />
           </div>
         </template>
         <template v-else>
           <div class="grid gap-6">
-            <QuestionCard v-for="q in questions" :key="q.id" :question="q" @voted="handleQuestionVoted" />
+            <QuestionCard v-for="q in questions" :key="q.id" :question="q" />
           </div>
 
           <template v-if="questions.length === 0">
@@ -193,15 +293,149 @@ const handleQuestionVoted = () => {
               </div>
             </div>
           </template>
+
+          <div v-if="questions.length > 0" class="pt-10 border-t mt-10">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div class="flex items-center gap-2 order-2 sm:order-1">
+                <span class="text-sm text-muted-foreground">Show</span>
+                <Select v-model="questionPageOptions.limit">
+                  <SelectTrigger class="w-[70px]">
+                    <SelectValue :placeholder="questionPageOptions.limit.toString()" />
+                  </SelectTrigger>
+                  <SelectContent class="min-w-[70px]">
+                    <SelectGroup>
+                      <SelectItem v-for="size in pageSizeOptions" :key="size" :value="size">
+                        {{ size }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <span class="text-sm text-muted-foreground">per page</span>
+              </div>
+
+              <div class="order-1 sm:order-2">
+                <Pagination v-slot="{ page }" :items-per-page="questionPageOptions.limit" :total="questionsTotal"
+                  v-model:page="questionPageOptions.page">
+                  <PaginationContent v-slot="{ items }">
+                    <PaginationPrevious />
+
+                    <template v-for="(item, index) in items" :key="index">
+                      <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === page">
+                        {{ item.value }}
+                      </PaginationItem>
+                    </template>
+
+                    <PaginationEllipsis :index="4" />
+
+                    <PaginationNext />
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </div>
+          </div>
         </template>
       </TabsContent>
 
       <TabsContent value="answers" class="py-10">
-        <div class="text-center py-24 bg-muted/10 rounded-3xl border-2 border-dashed border-muted">
-          <p class="text-xl font-medium text-muted-foreground">
-            Detailed activity tracking coming soon!
-          </p>
-        </div>
+        <template v-if="answersLoading">
+          <div class="space-y-6">
+            <Skeleton v-for="i in 3" :key="i" class="h-40 w-full rounded-2xl" />
+          </div>
+        </template>
+        <template v-else>
+          <div class="space-y-6">
+            <Card v-for="answer in answers" :key="answer.id" :class="{
+              'border-primary': answer.isAccepted
+            }">
+              <CardHeader class="space-y-4">
+                <div class="flex items-start justify-between gap-4">
+                  <div class="flex-1 space-y-3">
+                    <div>
+                      <NuxtLink :to="`/questions/${answer.question?.id}`"
+                        class="text-lg font-semibold hover:text-primary transition-colors">
+                        {{ answer.question?.title || 'Question' }}
+                      </NuxtLink>
+                    </div>
+                    <div class="prose prose-sm max-w-none">
+                      <MarkdownRenderer :content="answer.content" />
+                    </div>
+                  </div>
+                  <div class="flex flex-col items-center gap-1 shrink-0">
+                    <div class="text-xs text-muted-foreground">Votes</div>
+                    <div class="text-lg font-bold">{{ answer.votes }}</div>
+                    <LucideCheckCircle v-if="answer.isAccepted" class="h-5 w-5 text-primary mt-1" />
+                  </div>
+                </div>
+                <div class="flex items-center justify-between text-sm text-muted-foreground pt-2 border-t">
+                  <span>{{ formatTimeAgo(answer.createdAt) }}</span>
+                  <NuxtLink :to="`/questions/${answer.question?.id}`" class="text-primary hover:underline">
+                    View question →
+                  </NuxtLink>
+                </div>
+              </CardHeader>
+            </Card>
+          </div>
+
+          <template v-if="answers.length === 0">
+            <div class="text-center py-24 border-2 border-dashed rounded-3xl border-muted bg-muted/10">
+              <div class="max-w-[320px] mx-auto space-y-6">
+                <div class="h-20 w-20 rounded-full bg-muted flex items-center justify-center mx-auto shadow-inner">
+                  <LucideMessageSquare class="h-10 w-10 text-muted-foreground" />
+                </div>
+                <div class="space-y-2">
+                  <h3 class="text-xl font-bold">
+                    No answers yet
+                  </h3>
+                  <p class="text-muted-foreground leading-relaxed">You haven't answered any questions yet. Start helping
+                    the community!</p>
+                </div>
+                <Button as-child variant="secondary" size="lg" class="px-8 shadow-sm">
+                  <NuxtLink to="/">Browse Questions</NuxtLink>
+                </Button>
+              </div>
+            </div>
+          </template>
+
+          <div v-if="answers.length > 0" class="pt-10 border-t mt-10">
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div class="flex items-center gap-2 order-2 sm:order-1">
+                <span class="text-sm text-muted-foreground">Show</span>
+                <Select v-model="answerPageOptions.limit">
+                  <SelectTrigger class="w-[70px]">
+                    <SelectValue :placeholder="answerPageOptions.limit.toString()" />
+                  </SelectTrigger>
+                  <SelectContent class="min-w-[70px]">
+                    <SelectGroup>
+                      <SelectItem v-for="size in pageSizeOptions" :key="size" :value="size">
+                        {{ size }}
+                      </SelectItem>
+                    </SelectGroup>
+                  </SelectContent>
+                </Select>
+                <span class="text-sm text-muted-foreground">per page</span>
+              </div>
+
+              <div class="order-1 sm:order-2">
+                <Pagination v-slot="{ page }" :items-per-page="answerPageOptions.limit" :total="answersTotal"
+                  v-model:page="answerPageOptions.page">
+                  <PaginationContent v-slot="{ items }">
+                    <PaginationPrevious />
+
+                    <template v-for="(item, index) in items" :key="index">
+                      <PaginationItem v-if="item.type === 'page'" :value="item.value" :is-active="item.value === page">
+                        {{ item.value }}
+                      </PaginationItem>
+                    </template>
+
+                    <PaginationEllipsis :index="4" />
+
+                    <PaginationNext />
+                  </PaginationContent>
+                </Pagination>
+              </div>
+            </div>
+          </div>
+        </template>
       </TabsContent>
     </Tabs>
   </div>

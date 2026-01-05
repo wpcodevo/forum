@@ -114,7 +114,6 @@ onBeforeUnmount(() => {
 </template>
 
 <style>
-/* Tiptap Editor Styles */
 .ProseMirror {
   outline: none;
   min-height: 300px;
@@ -151,6 +150,4 @@ onBeforeUnmount(() => {
   pointer-events: none;
   height: 0;
 }
-
-/* Syntax highlighting will be added by lowlight */
 </style>

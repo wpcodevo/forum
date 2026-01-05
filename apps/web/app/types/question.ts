@@ -16,6 +16,12 @@ export interface Answer {
   createdAt: Date;
   updatedAt: Date;
   author?: User;
+  userVote: number | null; // 1 for upvote, -1 for downvote, null for no vote
+  question?: {
+    id: string;
+    title: string;
+    author?: User;
+  };
 }
 
 export interface Question {
@@ -37,6 +43,11 @@ export interface QueryQuestionByUserId {
   page?: number;
   limit?: number;
   includeAnswers?: boolean
+}
+
+export interface QueryAnswerByUserId {
+  page?: number;
+  limit?: number;
 }
 
 export interface PaginateResponse<T> {

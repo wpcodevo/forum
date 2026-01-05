@@ -1,8 +1,13 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { User } from "./user.entity";
 import { Question } from "./question.entity";
+import { AnswerVote } from "./answer-vote.entity";
 
 @Entity("answers")
+@Index(["question"])
+@Index(["author"])
+@Index(["createdAt"])
+@Index(["votes"])
 export class Answer {
   @PrimaryGeneratedColumn("uuid")
   id: string
@@ -21,6 +26,9 @@ export class Answer {
 
   @ManyToOne(() => Question, (question) => question.answers, { onDelete: "CASCADE" })
   question: Question
+
+  @OneToMany(() => AnswerVote, (vote) => vote.answer)
+  voteRecords: AnswerVote[]
 
   @CreateDateColumn()
   createdAt: Date

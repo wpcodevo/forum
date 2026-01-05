@@ -1,16 +1,14 @@
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseUUIDPipe, Patch, Post, Query, Req, UseGuards } from '@nestjs/common';
 import { ApiBearerAuth } from '@nestjs/swagger';
-import { ThrottlerGuard } from '@nestjs/throttler';
+import { VoteAnswerDto } from '../answers/dtos/answer.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { OptionalJwtAuthGuard } from '../auth/guards/optional-jwt-auth.guard';
 import { CreateQuestionDto } from './dtos/create-question.dto';
-import { updateQuestionDto } from './dtos/update-question.dto';
 import { QueryQuestionByUserIdDto, QueryQuestionDto } from './dtos/query-question.dto';
+import { updateQuestionDto } from './dtos/update-question.dto';
 import { QuestionsService } from './questions.service';
-import { VoteAnswerDto } from '../answers/dtos/answer.dto';
 
 @Controller('questions')
-@UseGuards(ThrottlerGuard)
 export class QuestionsController {
   constructor(private readonly questionsService: QuestionsService) { }
 

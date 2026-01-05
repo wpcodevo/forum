@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { CheckCircle, Edit, FileQuestion, Loader2, X } from 'lucide-vue-next'
+import { CheckCircle, Edit, FileQuestion, Loader2, LucideChevronDown, LucideChevronUp, X } from 'lucide-vue-next'
 import MarkdownRenderer from '~/components/MarkdownRenderer.vue'
 import SimpleMarkdownEditor from '~/components/SimpleMarkdownEditor.vue'
 import { Badge } from '~/components/ui/badge'
@@ -12,10 +12,12 @@ import { Separator } from '~/components/ui/separator'
 import { Skeleton } from '~/components/ui/skeleton'
 import { useToast } from '~/composables/useToast'
 import { formatTimeAgo } from '~/lib/utils'
+import type { Question } from '~/types/question'
 
 const route = useRoute()
-const id = route.params.id as string
+const id = computed(() => route.params.id as string)
 const questionStore = useQuestionStore()
+const answerStore = useAnswerStore()
 const auth = useAuthStore()
 const { showPromise, showError } = useToast()
 const queryClient = useQueryClient()
@@ -28,6 +30,10 @@ const editForm = reactive({
   content: '',
 })
 const updatingQuestion = ref(false)
+
+const editingAnswerId = ref<string | null>(null)
+const answerEditForms = reactive<Record<string, { content: string }>>({})
+const updatingAnswers = reactive<Record<string, boolean>>({})
 
 const { data: question, isLoading, error } = useQuestionQuery(id)
 
@@ -61,11 +67,11 @@ async function submitAnswer() {
   submitting.value = true
 
   try {
-    const result = await questionStore.submitAnswer(id, answerForm.content)
+    const result = await answerStore.submitAnswer(id.value, answerForm.content)
 
     if (result.success) {
       answerForm.content = ''
-      await queryClient.invalidateQueries({ queryKey: ['question', id] })
+      await queryClient.invalidateQueries({ queryKey: ['question', id.value] })
 
       const { showSuccess } = useToast()
       showSuccess('Your answer has been posted successfully!')
@@ -88,18 +94,108 @@ const isAuthor = computed(() => {
   return auth.isAuthenticated && question.value && auth.user?.id === question.value.author?.id
 })
 
-const handleVote = async (value: 1 | -1) => {
+const handleQuestionVote = async (value: 1 | -1) => {
   if (!auth.isAuthenticated) {
     showError('Please log in to vote')
     return
   }
 
-  const result = await questionStore.voteQuestion(id, value)
+  const result = await questionStore.voteQuestion(id.value, value)
 
   if (result.success) {
     await queryClient.invalidateQueries({ queryKey: ['questions'] })
-    await queryClient.invalidateQueries({ queryKey: ['question', id] })
+    await queryClient.invalidateQueries({ queryKey: ['question', id.value] })
+  } else {
+    showError(result.error || 'Failed to vote')
   }
+}
+
+const handleAnswerVote = async (answerId: string, value: 1 | -1) => {
+  const result = await answerStore.voteAnswer(answerId, id.value, value)
+
+  if (!result.success) {
+    showError(result.error || 'Failed to vote')
+  }
+}
+
+const isAnswerAuthor = (answer: any) => {
+  return auth.isAuthenticated && answer.author && auth.user?.id === answer.author.id
+}
+
+const isAnswerUpvoted = computed(() => {
+  const votes: Record<string, boolean> = {}
+  question.value?.answers?.forEach((answer: any) => {
+    votes[answer.id] = (answer.userVote ?? null) === 1
+  })
+  return (answerId: string) => votes[answerId] ?? false
+})
+
+const isAnswerDownvoted = computed(() => {
+  const votes: Record<string, boolean> = {}
+  question.value?.answers?.forEach((answer: any) => {
+    votes[answer.id] = (answer.userVote ?? null) === -1
+  })
+  return (answerId: string) => votes[answerId] ?? false
+})
+
+const handleAcceptAnswer = async (answerId: string) => {
+  if (!auth.isAuthenticated) {
+    showError('Please log in to accept answers')
+    return
+  }
+
+  const result = await answerStore.acceptAnswer(answerId, id.value)
+
+  if (!result.success) {
+    showError(result.error || 'Failed to accept answer')
+  } else {
+    const { showSuccess } = useToast()
+    showSuccess('Answer accepted!')
+  }
+}
+
+const startEditingAnswer = (answer: any) => {
+  editingAnswerId.value = answer.id
+  answerEditForms[answer.id] = { content: answer.content }
+}
+
+const cancelEditingAnswer = (answerId: string) => {
+  editingAnswerId.value = null
+  delete answerEditForms[answerId]
+  updatingAnswers[answerId] = false
+}
+
+const saveAnswer = async (answerId: string) => {
+  const editContent = answerEditForms[answerId]?.content?.trim()
+  if (!editContent) {
+    showError('Answer content cannot be empty')
+    return
+  }
+
+  updatingAnswers[answerId] = true
+
+  const answerPromise = answerStore.updateAnswer(answerId, id.value, editContent).then((result: { success: boolean; error?: string }) => {
+    if (result.success) {
+      return result
+    } else {
+      throw new Error(result.error || 'Failed to update your answer')
+    }
+  })
+
+  showPromise(answerPromise, {
+    loading: 'Updating your answer...',
+    success: () => {
+      updatingAnswers[answerId] = false
+      editingAnswerId.value = null
+      delete answerEditForms[answerId]
+      queryClient.invalidateQueries({ queryKey: ['question', id.value] })
+      return 'Your answer has been updated successfully!'
+    },
+    error: (error: Error) => {
+      updatingAnswers[answerId] = false
+      return error.message || 'Failed to update your answer. Please try again.'
+    },
+  })
 }
 
 const startEditing = () => {
@@ -123,10 +219,10 @@ const saveQuestion = async () => {
 
   updatingQuestion.value = true
 
-  const questionPromise = questionStore.updateQuestion(id, {
+  const questionPromise = questionStore.updateQuestion(id.value, {
     title: editForm.title,
     content: editForm.content
-  }).then((result) => {
+  }).then((result: { success: boolean; data?: Question; error?: string }) => {
     if (result.success && result.data) {
       return result.data
     } else {
@@ -139,7 +235,7 @@ const saveQuestion = async () => {
     success: () => {
       updatingQuestion.value = false
       isEditing.value = false
-      queryClient.invalidateQueries({ queryKey: ['question', id] })
+      queryClient.invalidateQueries({ queryKey: ['question', id.value] })
       return 'Your question has been updated successfully!'
     },
     error: (error: Error) => {
@@ -156,8 +252,8 @@ onServerPrefetch(async () => {
 
   try {
     await queryClient.ensureQueryData({
-      queryKey: ['question', id],
-      queryFn: () => fetchQuestion(id)
+      queryKey: ['question', id.value],
+      queryFn: () => fetchQuestion(id.value)
     })
   } catch (err: any) {
     if (err?.statusCode === 404 || err?.status === 404) {
@@ -170,6 +266,7 @@ onServerPrefetch(async () => {
     throw err
   }
 })
+
 </script>
 
 <template>
@@ -178,21 +275,26 @@ onServerPrefetch(async () => {
       <section class="space-y-4">
         <div class="flex items-start gap-4">
           <div class="flex flex-col items-center gap-1">
-            <Button variant="ghost" size="icon" @click="handleVote(1)" :disabled="isUpvoted" :class="[
+            <Button variant="ghost" size="icon" @click="handleQuestionVote(1)" :disabled="isAuthor || isEditing" :class="[
               'h-6 w-6 p-0 transition-colors',
-              isUpvoted
-                ? 'bg-green-100 text-green-700 hover:bg-green-200'
-                : 'hover:bg-green-50 hover:text-green-600'
+              isAuthor || isEditing
+                ? 'opacity-50 cursor-not-allowed'
+                : isUpvoted
+                  ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                  : 'hover:bg-green-50 hover:text-green-600'
             ]">
               <LucideChevronUp class="h-6 w-6" />
             </Button>
             <span class="text-xl font-bold">{{ question.votes }}</span>
-            <Button variant="ghost" size="icon" @click="handleVote(-1)" :class="[
-              'h-6 w-6 p-0 transition-colors',
-              isDownvoted
-                ? 'bg-red-100 text-red-700 hover:bg-red-200'
-                : 'hover:bg-red-50 hover:text-red-600'
-            ]">
+            <Button variant="ghost" size="icon" @click="handleQuestionVote(-1)" :disabled="isAuthor || isEditing"
+              :class="[
+                'h-6 w-6 p-0 transition-colors',
+                isAuthor || isEditing
+                  ? 'opacity-50 cursor-not-allowed'
+                  : isDownvoted
+                    ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                    : 'hover:bg-red-50 hover:text-red-600'
+              ]">
               <LucideChevronDown class="h-6 w-6" />
             </Button>
           </div>
@@ -262,7 +364,7 @@ onServerPrefetch(async () => {
         </div>
       </section>
 
-      <Separator />
+      <Separator v-if="auth.isAuthenticated" />
 
       <!-- Answer Form -->
       <section v-if="auth.isAuthenticated" class="space-y-4">
@@ -309,23 +411,92 @@ onServerPrefetch(async () => {
           }">
             <CardHeader class="flex flex-row items-start gap-4 space-y-0">
               <div class="flex flex-col items-center gap-1">
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" @click="handleAnswerVote(answer.id, 1)"
+                  :disabled="isAnswerAuthor(answer) || editingAnswerId === answer.id" :class="[
+                    'h-6 w-6 p-0 transition-colors',
+                    isAnswerAuthor(answer) || editingAnswerId === answer.id
+                      ? 'opacity-50 cursor-not-allowed'
+                      : isAnswerUpvoted(answer.id)
+                        ? 'bg-green-100 text-green-700 hover:bg-green-200'
+                        : 'hover:bg-green-50 hover:text-green-600'
+                  ]">
                   <LucideChevronUp class="h-5 w-5" />
                 </Button>
                 <span class="text-sm font-bold">
                   {{ answer.votes }}
                 </span>
-                <Button variant="ghost" size="icon">
+                <Button variant="ghost" size="icon" @click="handleAnswerVote(answer.id, -1)"
+                  :disabled="isAnswerAuthor(answer) || editingAnswerId === answer.id" :class="[
+                    'h-6 w-6 p-0 transition-colors',
+                    isAnswerAuthor(answer) || editingAnswerId === answer.id
+                      ? 'opacity-50 cursor-not-allowed'
+                      : isAnswerDownvoted(answer.id)
+                        ? 'bg-red-100 text-red-700 hover:bg-red-200'
+                        : 'hover:bg-red-50 hover:text-red-600'
+                  ]">
                   <LucideChevronDown class="h-5 w-5" />
                 </Button>
                 <CheckCircle v-if="answer.isAccepted" class="h-6 w-6 text-primary mt-2" />
               </div>
               <div class="flex-1 space-y-2">
-                <MarkdownRenderer :content="answer.content" />
-                <div class="flex items-center gap-2 text-xs text-muted-foreground pt-2">
-                  <span>By {{ answer.author?.name || 'Anonymous' }}</span>
-                  <span>•</span>
-                  <span>{{ formatTimeAgo(answer.createdAt) }}</span>
+                <template v-if="editingAnswerId !== answer.id">
+                  <MarkdownRenderer :content="answer.content" />
+                </template>
+
+                <template v-else>
+                  <div class="space-y-4">
+                    <div class="flex items-center justify-between">
+                      <Label class="text-base font-semibold">Edit Answer</Label>
+                      <Button variant="ghost" size="sm" @click="cancelEditingAnswer(answer.id)"
+                        :disabled="updatingAnswers[answer.id]">
+                        <X class="h-4 w-4 mr-2" />
+                        Cancel
+                      </Button>
+                    </div>
+                    <div class="space-y-3">
+                      <div>
+                        <Label for="edit-answer-content">Body</Label>
+                        <SimpleMarkdownEditor v-if="answerEditForms[answer.id]" id="edit-answer-content"
+                          v-model="answerEditForms[answer.id]!.content" :rows="12" class="mt-1" />
+                      </div>
+                      <div class="flex justify-end gap-2 pt-2">
+                        <Button variant="outline" @click="cancelEditingAnswer(answer.id)"
+                          :disabled="updatingAnswers[answer.id]">
+                          Cancel
+                        </Button>
+                        <Button @click="saveAnswer(answer.id)"
+                          :disabled="updatingAnswers[answer.id] || !answerEditForms[answer.id]?.content?.trim()">
+                          <Loader2 v-if="updatingAnswers[answer.id]" class="mr-2 h-4 w-4 animate-spin" />
+                          Save Changes
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+
+                <div class="flex items-center justify-between pt-2">
+                  <div class="flex items-center gap-2 text-xs text-muted-foreground">
+                    <span>By {{ answer.author?.name || 'Anonymous' }}</span>
+                    <span>•</span>
+                    <span>{{ formatTimeAgo(answer.createdAt) }}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <Button v-if="isAnswerAuthor(answer) && editingAnswerId !== answer.id" variant="outline" size="sm"
+                      @click="startEditingAnswer(answer)" class="text-xs">
+                      <Edit class="h-3 w-3 mr-1" />
+                      Edit
+                    </Button>
+                    <Button v-if="isAuthor && !answer.isAccepted" variant="outline" size="sm"
+                      @click="handleAcceptAnswer(answer.id)" class="text-xs">
+                      <CheckCircle class="h-3 w-3 mr-1" />
+                      Accept Answer
+                    </Button>
+                    <div v-else-if="isAuthor && answer.isAccepted"
+                      class="flex items-center gap-1 text-xs text-primary font-medium">
+                      <CheckCircle class="h-3 w-3" />
+                      <span>Accepted</span>
+                    </div>
+                  </div>
                 </div>
               </div>
             </CardHeader>

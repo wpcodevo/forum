@@ -1,4 +1,4 @@
-import { BeforeInsert, BeforeUpdate, Column, CreateDateColumn, Entity, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, CreateDateColumn, Entity, Index, OneToMany, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import bcrypt from "bcrypt"
 import { Exclude } from "class-transformer";
 import { env } from 'node:process';
@@ -7,6 +7,8 @@ import { Answer } from "./answer.entity";
 
 
 @Entity("users")
+@Index(["email"])
+@Index(["username"])
 export class User {
   @PrimaryGeneratedColumn("uuid")
   id: string

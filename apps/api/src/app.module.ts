@@ -1,4 +1,5 @@
 import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { APP_GUARD } from '@nestjs/core';
 
 import { CacheModule } from '@nestjs/cache-manager';
 import { ConfigModule, ConfigService } from '@nestjs/config';
@@ -6,6 +7,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ThrottlerModule } from '@nestjs/throttler';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { LoggerMiddleware } from './common/middleware/logger.middleware';
+import { CustomThrottlerGuard } from './common/guards/throttler.guard';
 import { EnvConfig, envSchema } from './config/env.config';
 import { AnswersModule } from './modules/answers/answers.module';
 import { AuthModule } from './modules/auth/auth.module';
@@ -52,6 +54,12 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
     QuestionsModule,
     AnswersModule,
     NotificationsModule,
+  ],
+  providers: [
+    {
+      provide: APP_GUARD,
+      useClass: CustomThrottlerGuard,
+    },
   ],
 })
 export class AppModule implements NestModule {

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { useDebounceFn } from '@vueuse/core'
 import { LucideInbox } from 'lucide-vue-next';
 import QuestionCard from '~/components/QuestionCard.vue';
 import { Button } from '~/components/ui/button';
@@ -9,6 +10,9 @@ import { Tabs, TabsList, TabsTrigger } from '~/components/ui/tabs';
 import { useQuestionsQuery } from '~/stores/questions';
 import { useQuestionApi } from '~/composables/useQuestionApi';
 
+const route = useRoute()
+const router = useRouter()
+
 const pageOptions = reactive({
   page: 1,
   limit: 10
@@ -16,13 +20,47 @@ const pageOptions = reactive({
 const pageSizeOptions = [10, 20, 30, 40, 50]
 const sortBy = ref<'newest' | 'recentlyAnswered' | 'unanswered' | 'popular'>('newest')
 
+const rawSearchQuery = computed(() => {
+  const search = route.query.search
+  return typeof search === 'string' && search.length >= 2 ? search : ''
+})
+
+const debouncedSearchQuery = ref('')
+
+const updateDebouncedSearch = useDebounceFn((value: string) => {
+  debouncedSearchQuery.value = value
+}, 500)
+
+watch(rawSearchQuery, (value) => {
+  updateDebouncedSearch(value)
+}, { immediate: true })
+
 const queryParams = computed(() => ({
   page: pageOptions.page,
   limit: pageOptions.limit,
-  sort: sortBy.value
+  sort: sortBy.value,
+  search: debouncedSearchQuery.value || undefined
 }))
 
-const { data: questionsData, isLoading: loading, refetch } = useQuestionsQuery(queryParams)
+// Watch URL query params and update local state
+watch(() => route.query.page, (page) => {
+  if (page && typeof page === 'string') {
+    const pageNum = parseInt(page, 10)
+    if (!isNaN(pageNum) && pageNum >= 1) {
+      pageOptions.page = pageNum
+    }
+  } else {
+    pageOptions.page = 1
+  }
+}, { immediate: true })
+
+watch(() => route.query.sort, (sort) => {
+  if (sort && typeof sort === 'string' && ['newest', 'recentlyAnswered', 'unanswered', 'popular'].includes(sort)) {
+    sortBy.value = sort as typeof sortBy.value
+  }
+}, { immediate: true })
+
+const { data: questionsData, isLoading: loading } = useQuestionsQuery(queryParams)
 
 const total = computed(() => questionsData.value?.total || 0)
 const questions = computed(() => questionsData.value?.items || [])
@@ -44,13 +82,20 @@ onServerPrefetch(async () => {
   })
 })
 
-watch([sortBy, () => pageOptions.limit], () => {
-  pageOptions.page = 1
+watch([sortBy, () => pageOptions.limit, rawSearchQuery], () => {
+  // Reset to page 1 when sort, limit, or search changes
+  if (pageOptions.page !== 1) {
+    router.push({
+      path: '/',
+      query: {
+        ...route.query,
+        page: '1'
+      }
+    })
+  }
 }, { immediate: false })
 
-const handleQuestionVoted = () => {
-  refetch()
-}
+
 useHead({
   title: 'DevFlow - Top Questions',
   meta: [
@@ -97,7 +142,7 @@ useHead({
       <Skeleton v-for="i in 3" :key="i" class="h-40 w-full rounded-2xl" />
     </div>
     <div v-else class="grid gap-6">
-      <QuestionCard v-for="q in questions" :key="q.id" :question="q" @voted="handleQuestionVoted" />
+      <QuestionCard v-for="q in questions" :key="q.id" :question="q" />
 
       <div v-if="questions.length === 0"
         class="text-center py-24 bg-muted/20 border-2 border-dashed rounded-3xl border-muted">

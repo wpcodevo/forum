@@ -1,14 +1,12 @@
-import { Body, Controller, Post, Res, UseGuards } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { RegisterUserDto } from './dtos/register.dto';
-import { LoginUserDto } from './dtos/login.dto';
-import { ThrottlerGuard } from '@nestjs/throttler';
-import { Response } from 'express';
+import { Body, Controller, Post, Res } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Response } from 'express';
 import { EnvConfig } from '../../config/env.config';
+import { AuthService } from './auth.service';
+import { LoginUserDto } from './dtos/login.dto';
+import { RegisterUserDto } from './dtos/register.dto';
 
 @Controller('auth')
-@UseGuards(ThrottlerGuard)
 export class AuthController {
   constructor(private readonly authService: AuthService, private readonly configService: ConfigService<EnvConfig>) { }
 

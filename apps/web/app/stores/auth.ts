@@ -1,10 +1,12 @@
 import { defineStore } from "pinia";
 import type { LoginInput, RegisterInput, User } from "~/types/user";
+import { useUserApi } from "~/composables/useUserApi";
 
 export const useAuthStore = defineStore("auth", () => {
   const user = ref<User | null>(null)
   const isAuthenticated = computed(() => !!user.value)
   const { $fetchApi } = useApi()
+  const { updateUser: updateUserApi } = useUserApi()
 
   async function login(credentials: LoginInput) {
     try {
@@ -54,6 +56,26 @@ export const useAuthStore = defineStore("auth", () => {
     user.value = authUser
   }
 
+  async function updateProfile(payload: { name?: string; username?: string; bio?: string }) {
+    if (!user.value) {
+      return {
+        success: false,
+        error: 'You must be logged in to update your profile'
+      }
+    }
+
+    try {
+      const updatedUser = await updateUserApi(user.value.id, payload)
+      user.value = updatedUser
+      return { success: true, data: updatedUser }
+    } catch (error: any) {
+      return {
+        success: false,
+        error: error.data?.message || error.message || 'Failed to update profile'
+      }
+    }
+  }
+
   return {
     user,
     isAuthenticated,
@@ -61,6 +83,7 @@ export const useAuthStore = defineStore("auth", () => {
     register,
     logout,
     setUser,
+    updateProfile,
     $fetchApi
   }
 })

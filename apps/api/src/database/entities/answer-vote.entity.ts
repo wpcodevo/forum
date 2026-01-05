@@ -1,20 +1,20 @@
 import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, Unique } from "typeorm";
 import { User } from "./user.entity";
-import { Question } from "./question.entity";
+import { Answer } from "./answer.entity";
 
-@Entity("question_votes")
-@Unique(["user", "question"])
-@Index(["question"])
+@Entity("answer_votes")
+@Unique(["user", "answer"])
+@Index(["answer"])
 @Index(["user"])
-export class QuestionVote {
+export class AnswerVote {
   @PrimaryGeneratedColumn("uuid")
   id: string
 
   @ManyToOne(() => User, { onDelete: "CASCADE" })
   user: User
 
-  @ManyToOne(() => Question, (question) => question.voteRecords, { onDelete: "CASCADE" })
-  question: Question
+  @ManyToOne(() => Answer, (answer) => answer.voteRecords, { onDelete: "CASCADE" })
+  answer: Answer
 
   @Column({ type: "int" })
   value: number // 1 for upvote, -1 for downvote

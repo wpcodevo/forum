@@ -13,7 +13,7 @@ export const useQuestionApi = () => {
     if (params.sort) queryParams.append('sort', params.sort)
 
     const queryString = queryParams.toString()
-    return await $fetchApi<PaginateResponse<Question>>(`/questions${queryString ? `?${queryString}` : ''}`)
+    return await $fetchApi<PaginateResponse<Question>>(`/questions?${queryString}`)
   }
 
   const fetchQuestion = async (id: string): Promise<Question> => {
@@ -28,7 +28,7 @@ export const useQuestionApi = () => {
     if (params.includeAnswers !== undefined) queryParams.append('includeAnswers', params.includeAnswers.toString())
 
     const queryString = queryParams.toString()
-    return await $fetchApi<PaginateResponse<Question>>(`/questions/user${queryString ? `?${queryString}` : ''}`)
+    return await $fetchApi<PaginateResponse<Question>>(`/questions/user?${queryString}`)
   }
 
   const voteQuestion = async (id: string, value: 1 | -1): Promise<Question> => {
@@ -45,13 +45,6 @@ export const useQuestionApi = () => {
     })
   }
 
-  const submitAnswer = async (questionId: string, content: string): Promise<void> => {
-    await $fetchApi(`/answers/question/${questionId}`, {
-      method: 'POST',
-      body: { content }
-    })
-  }
-
   const updateQuestion = async (id: string, payload: { title?: string; content?: string }): Promise<Question> => {
     return await $fetchApi<Question>(`/questions/${id}`, {
       method: 'PATCH',
@@ -65,7 +58,6 @@ export const useQuestionApi = () => {
     fetchUserQuestions,
     voteQuestion,
     createQuestion,
-    submitAnswer,
     updateQuestion
   }
 }

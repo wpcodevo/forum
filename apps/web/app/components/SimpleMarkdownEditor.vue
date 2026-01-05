@@ -16,7 +16,6 @@ const textarea = ref<HTMLTextAreaElement>()
 const previewMode = ref(false)
 const previewContent = ref('')
 
-// Configure marked renderer once
 let markedRenderer: any = null
 
 const getMarkedRenderer = async () => {
@@ -63,7 +62,6 @@ const insertCodeBlock = () => {
 
   emit('update:modelValue', newValue)
 
-  // Restore focus and cursor position
   nextTick(() => {
     if (textarea.value) {
       const newPosition = start + (selectedText ? codeBlock.length : 15)

@@ -6,8 +6,33 @@ import 'vue-sonner/style.css'
 
 const auth = useAuthStore()
 const route = useRoute()
+const router = useRouter()
 
 const showSearch = computed(() => route.path === '/')
+
+const searchQuery = ref('')
+
+watch(searchQuery, (newValue) => {
+  if (route.path === '/') {
+    router.push({
+      path: '/',
+      query: {
+        ...route.query,
+        search: newValue.trim() || undefined,
+        page: '1' // Reset to first page on new search
+      }
+    })
+  }
+})
+
+// Sync search input with URL query param
+watch(() => route.query.search, (search) => {
+  if (route.path === '/') {
+    searchQuery.value = typeof search === 'string' ? search : ''
+  } else {
+    searchQuery.value = ''
+  }
+}, { immediate: true })
 </script>
 
 <template>
@@ -23,7 +48,8 @@ const showSearch = computed(() => route.path === '/')
           <div v-if="showSearch" class="w-full flex-1 md:w-auto md:flex-none">
             <div class="relative">
               <LucideSearch class="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-              <Input type="search" placeholder="Search questions..." class="pl-8 md:w-[300px] lg:w-[400px]" />
+              <Input type="search" v-model="searchQuery" placeholder="Search questions..."
+                class="pl-8 md:w-[300px] lg:w-[400px]" />
             </div>
           </div>
           <nav class="flex items-center gap-2">

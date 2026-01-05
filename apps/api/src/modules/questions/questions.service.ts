@@ -1,24 +1,26 @@
+import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ForbiddenException, Inject, Injectable, NotFoundException } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Question } from 'src/database/entities/question.entity';
+import { Cache } from 'cache-manager';
+import { removeUndefinedAndNull } from 'src/common/utils/object.util';
 import { Answer } from 'src/database/entities/answer.entity';
 import { QuestionVote } from 'src/database/entities/question-vote.entity';
+import { Question } from 'src/database/entities/question.entity';
 import { Repository } from 'typeorm';
-import { CreateQuestionDto } from './dtos/create-question.dto';
-import { Cache } from 'cache-manager';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { updateQuestionDto } from './dtos/update-question.dto';
-import { removeUndefinedAndNull } from 'src/common/utils/object.util';
-import { UsersService } from '../users/users.service';
+import { AnswersService } from '../answers/answers.service';
 import { VoteAnswerDto } from '../answers/dtos/answer.dto';
+import { UsersService } from '../users/users.service';
+import { CreateQuestionDto } from './dtos/create-question.dto';
 import { QueryQuestionByUserIdDto, SortBy } from './dtos/query-question.dto';
+import { updateQuestionDto } from './dtos/update-question.dto';
 
 @Injectable()
 export class QuestionsService {
   constructor(
     @InjectRepository(Question) private questionsRepository: Repository<Question>,
     @InjectRepository(QuestionVote) private questionVotesRepository: Repository<QuestionVote>,
+    private answersService: AnswersService,
     private eventEmitter: EventEmitter2,
     @Inject(CACHE_MANAGER) private cacheManager: Cache,
     private usersService: UsersService
@@ -184,7 +186,12 @@ export class QuestionsService {
       name: questionAuthor.name
     } : null
 
-    // Format answers with author information
+    // Get user votes for answers if userId is provided
+    const answerUserVotes = userId && answers && answers.length > 0
+      ? await this.answersService.getUserVotesForAnswers(answers.map(a => a.id), userId)
+      : {}
+
+    // Format answers with author information and userVote
     const formattedAnswers = answers?.map(answer => {
       const { author, ...answerRest } = answer
       return {
@@ -193,7 +200,8 @@ export class QuestionsService {
           id: author.id,
           username: author.username,
           name: author.name
-        } : null
+        } : null,
+        userVote: userId ? (answerUserVotes[answer.id] || null) : null
       }
     }) || []
 
@@ -285,7 +293,8 @@ export class QuestionsService {
 
     await this.clearQuestionCache()
 
-    return question
+    // Get the updated question with userVote field
+    return this.findOne(id, userId)
   }
 
   async update(id: string, data: updateQuestionDto, userId: string) {
